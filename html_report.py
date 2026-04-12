@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import base64
 import html
+import mimetypes
 from pathlib import Path
 from typing import Dict, List
 
@@ -20,15 +22,31 @@ def _warning_block(ml_results: Dict) -> str:
     return f'<div class="{css_class}">{message}</div>'
 
 
+def _visual_block(name: str, path: str) -> str:
+    file_path = Path(path)
+    if not file_path.exists():
+        return f'<div class="viz"><h4>{html.escape(name.replace("_", " ").title())}</h4><p>Visualization file not found.</p></div>'
+
+    if file_path.suffix.lower() == ".html":
+        return (
+            f'<div class="viz"><h4>{html.escape(name.replace("_", " ").title())}</h4>'
+            f'{file_path.read_text(encoding="utf-8")}</div>'
+        )
+
+    mime_type = mimetypes.guess_type(str(file_path))[0] or "image/png"
+    encoded = base64.b64encode(file_path.read_bytes()).decode("utf-8")
+    return (
+        f'<div class="viz"><h4>{html.escape(name.replace("_", " ").title())}</h4>'
+        f'<img src="data:{mime_type};base64,{encoded}" alt="{html.escape(name)}"/></div>'
+    )
+
+
 def build_html_report(results: Dict, visuals: Dict[str, str]) -> str:
     insights: List[str] = results.get("insights", [])
     overview = results.get("overview", {})
     ml_results = results.get("ml_results", {})
 
-    visual_html = "".join(
-        f'<div class="viz"><h4>{html.escape(name.replace("_", " ").title())}</h4><img src="{html.escape(Path(path).name)}" alt="{html.escape(name)}"/></div>'
-        for name, path in visuals.items()
-    )
+    visual_html = "".join(_visual_block(name, path) for name, path in visuals.items())
 
     insight_items = "".join(f"<li>{html.escape(insight)}</li>" for insight in insights)
 

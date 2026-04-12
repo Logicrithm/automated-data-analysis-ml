@@ -4,12 +4,15 @@ import json
 from pathlib import Path
 from typing import Dict, List, Optional
 
+import numpy as np
 import pandas as pd
 
 from analysis import choose_target_column, run_regression_analysis
 from html_report import build_html_report
 from insights_generator import generate_ranked_insights
 from visualization import generate_visualizations
+
+RANDOM_STATE = 42
 
 
 class DataAnalyzer:
@@ -96,6 +99,25 @@ class DataAnalyzer:
         self.results["insights"] = insights
         return insights
 
+    def validate_consistency(self) -> None:
+        ml_results = self.results.get("ml_results", {})
+        if ml_results.get("problem_type") != "regression":
+            return
+
+        r2_value = float(ml_results.get("r2_score", 0.0))
+        if not np.isfinite(r2_value):
+            raise ValueError("R² score must be finite.")
+
+        strongest_feature = ml_results.get("strongest_feature")
+        standardized = ml_results.get("standardized_importance") or []
+        if strongest_feature and standardized:
+            if strongest_feature != standardized[0].get("feature"):
+                raise ValueError("Strongest predictor must match standardized importance ranking.")
+
+        insights = self.results.get("insights", [])
+        if len(insights) != len(set(insights)):
+            raise ValueError("Insights must be deduplicated.")
+
     def generate_html_report(self, output_dir: str) -> str:
         output_path = Path(output_dir)
         output_path.mkdir(parents=True, exist_ok=True)
@@ -114,12 +136,14 @@ class DataAnalyzer:
         return str(json_path)
 
     def run_full_analysis(self, output_dir: str = "./output", target_column: Optional[str] = None) -> Dict:
+        np.random.seed(RANDOM_STATE)
         self.load_data()
         self.analyze_overview()
         quality_summary = self.quality_detection()
         self.ml_pipeline(target_column)
         self.visualizations(output_dir)
         self.generate_insights(quality_summary)
+        self.validate_consistency()
 
         return {
             "html": self.generate_html_report(output_dir),

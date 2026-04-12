@@ -12,7 +12,7 @@ def _save_plot(path: Path) -> str:
     plt.tight_layout()
     plt.savefig(path, dpi=150)
     plt.close()
-    return str(path)
+    return str(path.resolve())
 
 
 def generate_visualizations(df: pd.DataFrame, target_column: str, output_dir: str) -> Dict[str, str]:
