@@ -1,0 +1,7 @@
+# Dependencies for the project
+
+numpy
+pandas
+matplotlib
+scikit-learn
+
