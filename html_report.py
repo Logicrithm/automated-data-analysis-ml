@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import html
 from pathlib import Path
 from typing import Dict, List
 
@@ -25,11 +26,11 @@ def build_html_report(results: Dict, visuals: Dict[str, str]) -> str:
     ml_results = results.get("ml_results", {})
 
     visual_html = "".join(
-        f'<div class="viz"><h4>{name.replace("_", " ").title()}</h4><img src="{Path(path).name}" alt="{name}"/></div>'
+        f'<div class="viz"><h4>{html.escape(name.replace("_", " ").title())}</h4><img src="{html.escape(Path(path).name)}" alt="{html.escape(name)}"/></div>'
         for name, path in visuals.items()
     )
 
-    insight_items = "".join(f"<li>{insight}</li>" for insight in insights)
+    insight_items = "".join(f"<li>{html.escape(insight)}</li>" for insight in insights)
 
     return f"""
 <!doctype html>

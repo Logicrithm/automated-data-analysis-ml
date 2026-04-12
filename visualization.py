@@ -46,7 +46,7 @@ def generate_visualizations(df: pd.DataFrame, target_column: str, output_dir: st
         if not scatter_df.empty:
             plt.figure(figsize=(8, 5))
             plt.scatter(scatter_df["sqft_living"], scatter_df[target_column], alpha=0.35, s=20, color="#DD8452")
-            plt.title("sqft_living vs price")
+            plt.title(f"sqft_living vs {target_column}")
             plt.xlabel("sqft_living")
             plt.ylabel(target_column)
             visuals["scatter_sqft_vs_price"] = _save_plot(output_path / "sqft_living_vs_price.png")

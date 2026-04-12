@@ -19,11 +19,11 @@ class ModelInterpretation:
     message: str
 
 
-def interpret_r2_score(r2_value: float) -> ModelInterpretation:
+def interpret_r2_score(r2_value: float, target_label: str = "target") -> ModelInterpretation:
     if r2_value < 0.2:
         return ModelInterpretation(
             severity="critical",
-            message=f"🚨 Model is unreliable - R² too low. CRITICAL: Price prediction model failed with R² = {r2_value:.1%}, indicating current features are insufficient.",
+            message=f"🚨 Model is unreliable. CRITICAL: {target_label} prediction model failed with R² = {r2_value:.1%}, indicating current features are insufficient.",
         )
     if r2_value < 0.5:
         return ModelInterpretation(
@@ -57,7 +57,7 @@ def choose_target_column(df: pd.DataFrame, requested_target: Optional[str] = Non
         if "price" in preferred.lower():
             return preferred
 
-    return numeric_columns[-1]
+    return max(numeric_columns, key=lambda col: df[col].var(skipna=True))
 
 
 def run_regression_analysis(df: pd.DataFrame, target_column: str) -> Dict:
@@ -70,12 +70,13 @@ def run_regression_analysis(df: pd.DataFrame, target_column: str) -> Dict:
     feature_df = feature_df.select_dtypes(include=[np.number]).replace([np.inf, -np.inf], np.nan).fillna(0)
 
     if feature_df.empty or len(working_df) < 20:
+        interpretation = interpret_r2_score(0.0, target_column)
         return {
             "problem_type": "regression",
             "target_column": target_column,
             "r2_score": 0.0,
-            "severity": "critical",
-            "interpretation": "🚨 Model is unreliable - R² too low. CRITICAL: Price prediction model failed with R² = 0.0%, indicating current features are insufficient.",
+            "severity": interpretation.severity,
+            "interpretation": interpretation.message,
         }
 
     y = working_df[target_column]
@@ -89,7 +90,7 @@ def run_regression_analysis(df: pd.DataFrame, target_column: str) -> Dict:
     strongest_idx = int(np.argmax(np.abs(model.coef_))) if len(model.coef_) else 0
     strongest_feature = feature_df.columns[strongest_idx] if len(feature_df.columns) else "N/A"
 
-    interpretation = interpret_r2_score(r2_value)
+    interpretation = interpret_r2_score(r2_value, target_column)
     return {
         "problem_type": "regression",
         "target_column": target_column,

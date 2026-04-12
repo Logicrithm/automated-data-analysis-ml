@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 import pandas as pd
 
@@ -91,7 +91,7 @@ class DataAnalyzer:
         self.results["visualizations"] = visuals
         return visuals
 
-    def generate_insights(self, quality_summary: Dict) -> list[str]:
+    def generate_insights(self, quality_summary: Dict) -> List[str]:
         insights = generate_ranked_insights(self.results, quality_summary)
         self.results["insights"] = insights
         return insights
@@ -131,7 +131,7 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(description="Run automated analysis")
-    parser.add_argument("data_path", help="Path to csv data file")
+    parser.add_argument("data_path", help="Path to CSV data file")
     parser.add_argument("output_dir", nargs="?", default="./output", help="Output directory")
     parser.add_argument("target_column", nargs="?", default=None, help="Optional target column")
     args = parser.parse_args()
