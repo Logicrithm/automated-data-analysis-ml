@@ -5,5 +5,11 @@ def detect_multicollinearity(X):
     '''Return a DataFrame of VIF for each feature '''
     vif_data = pd.DataFrame()
     vif_data['Feature'] = X.columns
-    vif_data['VIF'] = [variance_inflation_factor(X.values, i) for i in range(X.shape[1])]
+    vif_scores = []
+    for i in range(X.shape[1]):
+        try:
+            vif_scores.append(float(variance_inflation_factor(X.values, i)))
+        except (ValueError, ZeroDivisionError):
+            vif_scores.append(float("inf"))
+    vif_data['VIF'] = vif_scores
     return vif_data
