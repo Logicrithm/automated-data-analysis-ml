@@ -38,8 +38,15 @@ def build_html_report(results: Dict, visuals: Dict[str, str]) -> str:
     context = results.get("context", {})
     diagnosis = results.get("diagnosis", {})
     verdict = results.get("verdict", {})
-    recommendations = results.get("recommendations", [])
     confidence = results.get("confidence", {})
+    
+    # Handle recommendations - FIXED to handle both list and dict
+    recommendations = results.get("recommendations", [])
+    if isinstance(recommendations, dict):
+        recommendations = recommendations.get("recommendations", [])
+    if not isinstance(recommendations, list):
+        recommendations = []
+    
     model_comparison = (results.get("model_comparison") or {}).get("models") or []
     best_model = (results.get("model_comparison") or {}).get("best_model")
     data_quality = (results.get("data_quality") or {}).get("data_quality", {})
@@ -62,7 +69,13 @@ def build_html_report(results: Dict, visuals: Dict[str, str]) -> str:
         elif verdict.get("is_model_problem"):
             warning_html = '<div class="warning-banner medium">ℹ️ MODEL MISMATCH - Consider different algorithms</div>'
     
-    # Build executive summary
+    # Build executive summary - FIXED to handle empty recommendations
+    first_rec_action = "Review data"
+    if recommendations and len(recommendations) > 0:
+        first_rec = recommendations[0]
+        if isinstance(first_rec, dict) and 'action' in first_rec:
+            first_rec_action = str(first_rec.get('action', 'Review data'))[:40]
+    
     executive_html = f"""
     <div class="executive-summary">
         <h3>📊 Executive Summary</h3>
@@ -79,7 +92,7 @@ def build_html_report(results: Dict, visuals: Dict[str, str]) -> str:
             </div>
             <div class="summary-card">
                 <strong>Recommended Action:</strong>
-                <span class="value">{html.escape(str(recommendations[0].get('action', 'Review data')[:40])) if recommendations else 'No action'}</span>
+                <span class="value">{html.escape(first_rec_action)}</span>
             </div>
         </div>
     </div>
@@ -135,12 +148,16 @@ def build_html_report(results: Dict, visuals: Dict[str, str]) -> str:
     </div>
     """
     
-    # Build recommendations section
+    # Build recommendations section - FIXED to handle empty list
     rec_html = "<div class='recommendations-section'><h3>💡 Recommendations (Prioritized)</h3>"
-    for i, rec in enumerate(recommendations[:5], 1):
-        priority_class = html.escape(str(rec.get("priority", "MEDIUM")).lower())
-        rec_html += f"""
-        <div class="recommendation {priority_class}">
+    
+    if recommendations and len(recommendations) > 0:
+        for i, rec in enumerate(recommendations[:5], 1):
+            if not isinstance(rec, dict):
+                continue
+            priority = str(rec.get("priority", "MEDIUM")).lower()
+            rec_html += f"""
+        <div class="recommendation {priority}">
             <div class="rec-header">
                 <span class="priority-badge">[{html.escape(str(rec.get('priority', 'MEDIUM')))}]</span>
                 <span class="action">{html.escape(str(rec.get('action', '')))}</span>
@@ -154,13 +171,21 @@ def build_html_report(results: Dict, visuals: Dict[str, str]) -> str:
             </div>
         </div>
         """
+    else:
+        rec_html += "<p>No recommendations available.</p>"
+    
     rec_html += "</div>"
     
     # Build model comparison section
-    model_html = "<div class='model-section'><h3>📈 Model Comparison</h3><table class='model-table'><tr><th>Model</th><th>R² Score</th><th>RMSE</th><th>Speed</th><th>Recommendation</th></tr>"
+    model_html = "<div class='model-section'><h3>📈 Model Comparison</h3>"
     
-    for model in model_comparison:
-        model_html += f"""
+    if model_comparison and len(model_comparison) > 0:
+        model_html += "<table class='model-table'><tr><th>Model</th><th>R² Score</th><th>RMSE</th><th>Speed</th><th>Recommendation</th></tr>"
+        
+        for model in model_comparison:
+            if not isinstance(model, dict):
+                continue
+            model_html += f"""
         <tr>
             <td>{html.escape(str(model.get("name", "")))}</td>
             <td>{float(model.get("r2_score", 0)):.3f}</td>
@@ -169,12 +194,15 @@ def build_html_report(results: Dict, visuals: Dict[str, str]) -> str:
             <td>{html.escape(str(model.get("recommendation", "")))}</td>
         </tr>
         """
-    
-    model_html += f"""
+        
+        model_html += f"""
     </table>
     <p><strong>Best Model:</strong> {html.escape(str(best_model or 'N/A'))}</p>
-    </div>
     """
+    else:
+        model_html += "<p>No model comparison available.</p>"
+    
+    model_html += "</div>"
     
     # Build data quality section
     quality_html = f"""
