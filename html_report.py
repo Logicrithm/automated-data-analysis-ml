@@ -42,13 +42,48 @@ def _visual_block(name: str, path: str) -> str:
 
 
 def build_html_report(results: Dict, visuals: Dict[str, str]) -> str:
-    insights: List[str] = results.get("insights", [])
+    insights: List[Dict] = results.get("insights", [])
     overview = results.get("overview", {})
     ml_results = results.get("ml_results", {})
+    multicollinearity = results.get("multicollinearity", {})
 
     visual_html = "".join(_visual_block(name, path) for name, path in visuals.items())
-
-    insight_items = "".join(f"<li>{html.escape(insight)}</li>" for insight in insights)
+    severity_class = {
+        "CRITICAL": "critical",
+        "HIGH": "warning-level",
+        "MEDIUM": "ok",
+        "LOW": "info",
+    }
+    insight_cards = []
+    for insight in insights:
+        severity = str(insight.get("severity", "MEDIUM")).upper()
+        confidence = str(insight.get("confidence", "MEDIUM")).upper()
+        category = str(insight.get("category", "GENERAL")).upper()
+        actionable = "Yes" if bool(insight.get("actionable", False)) else "No"
+        content = html.escape(str(insight.get("content", "")))
+        insight_cards.append(
+            f"""
+            <div class="insight-card {severity_class.get(severity, 'info')}">
+              <div class="badges">
+                <span class="badge severity">{severity}</span>
+                <span class="badge confidence">Confidence: {confidence}</span>
+                <span class="badge category">{category}</span>
+                <span class="badge action">Actionable: {actionable}</span>
+              </div>
+              <p>{content}</p>
+            </div>
+            """
+        )
+    high_vif_pairs = multicollinearity.get("high_vif_pairs") or []
+    multicollinearity_banner = ""
+    if high_vif_pairs:
+        pair = high_vif_pairs[0]
+        multicollinearity_banner = (
+            '<div class="warning critical">'
+            f"⚠️ Multicollinearity Warning: {html.escape(pair['feature_a'])} and {html.escape(pair['feature_b'])} "
+            f"have correlation {pair['correlation']:.2f}. Review coefficient interpretation carefully."
+            "</div>"
+        )
 
     return f"""
 <!doctype html>
@@ -62,21 +97,24 @@ def build_html_report(results: Dict, visuals: Dict[str, str]) -> str:
     .section {{ margin-bottom: 28px; }}
     .warning {{ padding: 12px 14px; border-radius: 8px; font-weight: 700; margin: 10px 0; }}
     .critical {{ background: #fee2e2; color: #991b1b; border: 1px solid #ef4444; }}
-    .warning-level {{ background: #fef3c7; color: #92400e; border: 1px solid #f59e0b; }}
-    .ok {{ background: #dcfce7; color: #166534; border: 1px solid #22c55e; }}
+    .warning-level {{ background: #fff7ed; color: #9a3412; border: 1px solid #fb923c; }}
+    .ok {{ background: #fef9c3; color: #854d0e; border: 1px solid #eab308; }}
+    .info {{ background: #eff6ff; color: #1e3a8a; border: 1px solid #60a5fa; }}
+    .insight-card {{ border-radius: 8px; padding: 12px; margin-bottom: 12px; }}
+    .badges {{ display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }}
+    .badge {{ border-radius: 999px; padding: 4px 10px; font-size: 12px; font-weight: 700; background: rgba(255, 255, 255, 0.75); }}
     .viz {{ margin-bottom: 16px; }}
     img {{ max-width: 100%; border: 1px solid #e5e7eb; border-radius: 6px; }}
-    ul {{ padding-left: 22px; }}
-    li {{ margin-bottom: 8px; }}
   </style>
 </head>
 <body>
   <h1>Automated Data Analysis Report</h1>
 
   <div class="section">
-    <h2>Key Insights (Ranked)</h2>
+    <h2>Key Insights (Ranked by Severity)</h2>
     {_warning_block(ml_results)}
-    <ul>{insight_items}</ul>
+    {multicollinearity_banner}
+    {''.join(insight_cards) or '<p>No insights were generated.</p>'}
   </div>
 
   <div class="section">
