@@ -274,19 +274,20 @@ class DataAnalyzer:
     def run_full_analysis(self, output_dir: str = "./output", target_column: Optional[str] = None) -> Dict:
         np.random.seed(RANDOM_STATE)
         self.load_data()
+        current_df = self.data if self.data is not None else pd.DataFrame()
         self.analyze_overview()
         self.quality_detection()
-        self.results["data_quality"] = calculate_data_quality_score(self.data) if self.data is not None else {}
+        self.results["data_quality"] = calculate_data_quality_score(current_df) if not current_df.empty else {}
         ml_results = self.ml_pipeline(target_column)
         target_col = ml_results.get("target_column") or target_column
 
         self.results["signals"] = extract_signals(
-            self.data if self.data is not None else pd.DataFrame(),
+            current_df,
             target_col,
         )
         self.results["context"] = infer_domain(
             self.results["signals"],
-            self.data if self.data is not None else pd.DataFrame(),
+            current_df,
         )
         self.results["diagnosis"] = diagnose(self.results["signals"], ml_results)
         self.results["verdict"] = resolve_conflicts(

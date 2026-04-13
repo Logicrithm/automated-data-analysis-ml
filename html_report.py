@@ -67,6 +67,7 @@ def build_html_report(results: Dict, visuals: Dict[str, str]) -> str:
                 issue=html.escape(primary_issue.replace("_", " ").title())
             )
         )
+    warning_section_html = warning_banner if warning_banner else "<p>No critical warning flags.</p>"
 
     visual_html = "".join(_visual_block(name, path) for name, path in visuals.items())
 
@@ -97,7 +98,7 @@ def build_html_report(results: Dict, visuals: Dict[str, str]) -> str:
 <body>
   <h1>Automated Data Analysis Report</h1>
 
-  <div class="section">{warning_banner or '<p>No critical warning flags.</p>'}</div>
+  <div class="section">{warning_section_html}</div>
 
   <div class="section executive">
     <h2>Executive Summary</h2>

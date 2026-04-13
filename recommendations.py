@@ -67,7 +67,11 @@ def recommend(domain: str, diagnosis: Dict, verdict: Dict | None = None) -> Dict
         else:
             primary_issue = "unknown"
 
-    items = RULES[selected_domain].get(primary_issue) or RULES[selected_domain]["unknown"]
+    items = (
+        RULES[selected_domain].get(primary_issue)
+        or RULES[selected_domain].get("unknown")
+        or RULES["generic"]["unknown"]
+    )
     recommendations = [
         {
             "priority": priority,
