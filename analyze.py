@@ -8,32 +8,20 @@ import numpy as np
 import pandas as pd
 
 from analysis import choose_target_column, run_regression_analysis
-from confidence import calculate_confidence
-from data_quality_scorer import calculate_data_quality_score
-from conflict_resolver import resolve_conflicts
+from confidence_calculator import calculate_weighted_confidence
 from context import infer_domain
+from data_quality_scorer import calculate_data_quality_score
 from html_report import build_html_report
 from insights_generator import generate_ranked_insights
 from model_comparison import train_multiple_models
 from multicollinearity_detection import detect_multicollinearity
 from rca import diagnose
-from recommendations import recommend
+from recommendations_new import recommend
+from conflict_resolver import resolve_conflicts
 from signals import extract_signals
 from visualization import generate_visualizations
 
 RANDOM_STATE = 42
-ACTIONABILITY_CRITICAL = 0.9
-ACTIONABILITY_DEFAULT = 0.7
-DOMAIN_CONFIDENCE_HIGH = 0.85
-DOMAIN_CONFIDENCE_MEDIUM = 0.65
-DOMAIN_CONFIDENCE_LOW = 0.4
-DOMAIN_CONFIDENCE_DEFAULT = 0.5
-DOMAIN_CONFIDENCE_MAP = {
-    "HIGH": DOMAIN_CONFIDENCE_HIGH,
-    "MEDIUM": DOMAIN_CONFIDENCE_MEDIUM,
-    "LOW": DOMAIN_CONFIDENCE_LOW,
-}
-DEFAULT_FEATURE_RELEVANCE = 0.3
 
 
 class DataAnalyzer:
@@ -54,7 +42,6 @@ class DataAnalyzer:
             "visualizations": {},
             "data_quality": {},
             "model_comparison": {},
-            "root_cause_analysis": {},
         }
 
     def load_data(self) -> pd.DataFrame:
@@ -80,7 +67,6 @@ class DataAnalyzer:
             raise ValueError("Data is not loaded")
         missing = self.data.isnull().sum()
         total_missing = int(missing.sum())
-        duplicate_rows = int(self.data.duplicated().sum())
         issues = [
             {
                 "column": col,
@@ -90,9 +76,7 @@ class DataAnalyzer:
             for col, count in missing.items()
             if count > 0
         ]
-        if duplicate_rows > 0:
-            issues.append({"column": "__all__", "issue": "duplicate_rows", "count": duplicate_rows})
-        summary = {"total_missing": total_missing, "duplicate_rows": duplicate_rows, "issues": issues}
+        summary = {"total_missing": total_missing, "issues": issues}
         self.results["quality_issues"] = issues
         return summary
 
@@ -115,108 +99,6 @@ class DataAnalyzer:
         self.results["ml_results"] = ml_results
         return ml_results
 
-    def multicollinearity_pipeline(self, target_column: Optional[str]) -> Dict:
-        if self.data is None:
-            raise ValueError("Data is not loaded")
-        if not target_column or target_column not in self.data.columns:
-            summary = {"high_vif_features": [], "high_vif_pairs": [], "vif": []}
-            self.results["multicollinearity"] = summary
-            return summary
-
-        feature_df = self.data.drop(columns=[target_column])
-        feature_df = pd.get_dummies(feature_df, drop_first=True)
-        feature_df = feature_df.select_dtypes(include=[np.number]).replace([np.inf, -np.inf], np.nan)
-        feature_df = feature_df.fillna(feature_df.median(numeric_only=True))
-        feature_df = feature_df.fillna(0)
-        if feature_df.empty or feature_df.shape[1] < 2:
-            summary = {"high_vif_features": [], "high_vif_pairs": [], "vif": []}
-            self.results["multicollinearity"] = summary
-            return summary
-
-        vif_df = detect_multicollinearity(feature_df)
-        vif_records = [
-            {"feature": str(row["Feature"]), "vif": float(row["VIF"])}
-            for _, row in vif_df.iterrows()
-        ]
-        high_vif_features = [entry for entry in vif_records if entry["vif"] >= 5.0]
-        corr_matrix = feature_df.corr().abs()
-        high_vif_pairs = []
-        for i, feature_a in enumerate(corr_matrix.columns):
-            for j, feature_b in enumerate(corr_matrix.columns):
-                if j <= i:
-                    continue
-                corr = float(corr_matrix.iloc[i, j])
-                if corr >= 0.75 and (
-                    any(item["feature"] == feature_a for item in high_vif_features)
-                    or any(item["feature"] == feature_b for item in high_vif_features)
-                ):
-                    high_vif_pairs.append({"feature_a": feature_a, "feature_b": feature_b, "correlation": corr})
-
-        high_vif_pairs.sort(key=lambda item: item["correlation"], reverse=True)
-        summary = {
-            "high_vif_features": sorted(high_vif_features, key=lambda item: item["vif"], reverse=True),
-            "high_vif_pairs": high_vif_pairs,
-            "vif": sorted(vif_records, key=lambda item: item["vif"], reverse=True),
-        }
-        self.results["multicollinearity"] = summary
-        ml_results = self.results.get("ml_results", {})
-        ml_results["vif"] = summary["vif"]
-        if summary["high_vif_pairs"]:
-            top_pair = summary["high_vif_pairs"][0]
-            ml_results["multicollinearity_warning"] = (
-                f"⚠️ Multicollinearity warning: {top_pair['feature_a']} and {top_pair['feature_b']} "
-                f"have correlation {top_pair['correlation']:.2f}."
-            )
-        elif summary["high_vif_features"]:
-            ml_results["multicollinearity_warning"] = "⚠️ Multicollinearity warning: high VIF detected."
-        else:
-            ml_results["multicollinearity_warning"] = ""
-        return summary
-
-    def _prepare_model_data(self, target_column: Optional[str]) -> tuple[pd.DataFrame, pd.Series]:
-        """Build model-ready feature matrix and target with encoding and numeric-safe imputation."""
-        if self.data is None or not target_column or target_column not in self.data.columns:
-            return pd.DataFrame(), pd.Series(dtype=float)
-        working_df = self.data.dropna(subset=[target_column]).copy()
-        y = working_df[target_column]
-        x = pd.get_dummies(working_df.drop(columns=[target_column]), drop_first=True)
-        x = x.select_dtypes(include=[np.number]).replace([np.inf, -np.inf], np.nan)
-        x = x.fillna(x.median(numeric_only=True)).fillna(0)
-        return x, y
-
-    def root_cause_pipeline(self, ml_results: Dict, multicollinearity_summary: Dict, data_quality: Dict) -> Dict:
-        r2 = float(ml_results.get("r2_score", 0.0))
-        feature_count = len(ml_results.get("standardized_importance") or [])
-        quality_scores = (data_quality or {}).get("data_quality", {})
-        overall_quality = float(quality_scores.get("overall_score", 0.0))
-        chain: List[str] = []
-
-        if overall_quality < 80:
-            chain.append("Step 1: Data quality is below threshold; prioritize cleaning, deduplication, and outlier treatment.")
-        else:
-            chain.append("Step 1: Data quality is acceptable and not the primary bottleneck.")
-
-        high_vif_pairs = multicollinearity_summary.get("high_vif_pairs") or []
-        if high_vif_pairs:
-            chain.append("Step 2: Feature quality issue detected - multicollinearity suggests redundant predictors.")
-        elif feature_count < 5:
-            chain.append("Step 2: Feature count is limited; add domain-specific features and interactions.")
-        else:
-            chain.append("Step 2: Feature set size is reasonable; evaluate feature relevance vs. target.")
-
-        if r2 < 0.3:
-            chain.append("Step 3: Linear model underperforms; benchmark non-linear models and ensembles.")
-        else:
-            chain.append("Step 3: Model class appears reasonable; focus on residual behavior and calibration.")
-
-        chain.append("Step 4: Validate assumptions via residual and stability checks before deployment decisions.")
-        root_cause = (
-            "Feature set insufficient for reliable prediction."
-            if r2 < 0.3
-            else "Model is moderately predictive but can be improved through feature and model refinement."
-        )
-        return {"root_cause": root_cause, "chain_reasoning": chain, "high_vif_pairs": high_vif_pairs}
-
     def visualizations(self, output_dir: str) -> Dict[str, str]:
         if self.data is None:
             raise ValueError("Data is not loaded")
@@ -229,10 +111,110 @@ class DataAnalyzer:
         self.results["visualizations"] = visuals
         return visuals
 
-    def generate_insights(self, quality_summary: Dict, confidence: Dict) -> List[Dict]:
-        insights = generate_ranked_insights(self.results, quality_summary, confidence)
+    def calculate_data_quality(self) -> Dict:
+        """Calculate comprehensive data quality score"""
+        if self.data is None:
+            raise ValueError("Data is not loaded")
+        
+        quality_result = calculate_data_quality_score(self.data)
+        self.results["data_quality"] = quality_result
+        return quality_result
+
+    def detect_multicollinearity(self) -> Dict:
+        """Detect multicollinearity in numeric features"""
+        if self.data is None:
+            raise ValueError("Data is not loaded")
+        
+        numeric_cols = self.data.select_dtypes(include=[np.number]).columns.tolist()
+        if len(numeric_cols) < 2:
+            return {"high_vif_pairs": [], "vif_data": []}
+        
+        X = self.data[numeric_cols]
+        vif_data = detect_multicollinearity(X)
+        
+        # Find high VIF pairs (correlation > 0.75)
+        high_vif_pairs = []
+        numeric_data = self.data[numeric_cols].corr()
+        
+        for i in range(len(numeric_data.columns)):
+            for j in range(i+1, len(numeric_data.columns)):
+                corr = abs(numeric_data.iloc[i, j])
+                if corr > 0.75:
+                    high_vif_pairs.append({
+                        "feature_a": numeric_data.columns[i],
+                        "feature_b": numeric_data.columns[j],
+                        "correlation": float(numeric_data.iloc[i, j]),
+                    })
+        
+        vif_list = vif_data.to_dict('records') if hasattr(vif_data, 'to_dict') else []
+        
+        return {
+            "high_vif_pairs": high_vif_pairs,
+            "vif_data": vif_list,
+        }
+
+    def generate_model_comparison(self) -> Dict:
+        """Train and compare multiple models"""
+        ml_results = self.results.get("ml_results", {})
+        if ml_results.get("problem_type") != "regression":
+            return {"models": [], "best_model": None}
+        
+        target_column = ml_results.get("target_column")
+        if not target_column or target_column not in self.data.columns:
+            return {"models": [], "best_model": None}
+        
+        X = self.data.select_dtypes(include=[np.number]).drop(target_column, axis=1, errors='ignore')
+        y = self.data[target_column]
+        
+        if X.empty or len(X) < 20:
+            return {"models": [], "best_model": None}
+        
+        comparison = train_multiple_models(X, y)
+        self.results["model_comparison"] = comparison
+        return comparison
+
+    def generate_insights(self, quality_summary: Dict, multicollinearity: Dict) -> List[Dict]:
+        """Generate ranked insights with confidence"""
+        insights = generate_ranked_insights(self.results, quality_summary, multicollinearity)
         self.results["insights"] = insights
         return insights
+
+    def calculate_confidence_scores(self) -> Dict:
+        """Calculate multi-dimensional confidence"""
+        ml_results = self.results.get("ml_results", {})
+        data_quality_obj = self.results.get("data_quality", {})
+        signals = self.results.get("signals", {})
+        
+        # Extract quality metrics
+        data_quality_score = (data_quality_obj.get("data_quality", {}).get("overall_score", 50) or 50) / 100
+        
+        # Extract model performance
+        r2 = float(ml_results.get("r2_score", 0.0))
+        model_performance = min(1.0, r2 + 0.3)  # Normalize
+        
+        # Extract feature relevance
+        feature_importance = ml_results.get("standardized_importance", [])
+        feature_relevance = feature_importance[0].get("importance", 0.0) if feature_importance else 0.3
+        
+        # Domain confidence
+        context = self.results.get("context", {})
+        domain_confidence = context.get("confidence", 0.5)
+        
+        # Actionability
+        recommendations = self.results.get("recommendations", [])
+        has_actions = bool(recommendations) if isinstance(recommendations, list) else False
+        actionability = 0.9 if has_actions else 0.5
+        
+        confidence = calculate_weighted_confidence(
+            data_quality_score,
+            model_performance,
+            feature_relevance,
+            domain_confidence,
+            actionability,
+        )
+        
+        self.results["confidence"] = confidence
+        return confidence
 
     def validate_consistency(self) -> None:
         ml_results = self.results.get("ml_results", {})
@@ -250,8 +232,8 @@ class DataAnalyzer:
                 raise ValueError("Strongest predictor must match standardized importance ranking.")
 
         insights = self.results.get("insights", [])
-        insight_contents = [item.get("content", "").strip() for item in insights if isinstance(item, dict)]
-        if len(insight_contents) != len(set(insight_contents)):
+        unique_contents = {str(i.get("content", "")) for i in insights}
+        if len(insights) != len(unique_contents):
             raise ValueError("Insights must be deduplicated.")
 
     def generate_html_report(self, output_dir: str) -> str:
@@ -272,49 +254,81 @@ class DataAnalyzer:
         return str(json_path)
 
     def run_full_analysis(self, output_dir: str = "./output", target_column: Optional[str] = None) -> Dict:
+        """
+        Complete analysis pipeline with conflict resolution and structured diagnosis.
+        
+        Flow:
+        1. Load and analyze data
+        2. ML pipeline
+        3. Extract signals (NEW)
+        4. Infer domain (UPGRADED)
+        5. Data quality
+        6. Visualizations
+        7. Model comparison
+        8. RCA diagnosis (NEW)
+        9. Resolve conflicts (NEW - CRITICAL)
+        10. Generate recommendations (UPGRADED)
+        11. Generate insights
+        12. Calculate confidence
+        13. Validate
+        14. Generate reports
+        """
         np.random.seed(RANDOM_STATE)
+        
+        # Step 1-2: Load and analyze
         self.load_data()
-        analysis_df = self.data if self.data is not None else pd.DataFrame()
         self.analyze_overview()
-        self.quality_detection()
-        self.results["data_quality"] = calculate_data_quality_score(analysis_df) if not analysis_df.empty else {}
-        ml_results = self.ml_pipeline(target_column)
+        quality_summary = self.quality_detection()
+        
+        # Step 3: ML pipeline
+        self.ml_pipeline(target_column)
+        ml_results = self.results.get("ml_results", {})
         target_col = ml_results.get("target_column") or target_column
-
-        self.results["signals"] = extract_signals(
-            analysis_df,
-            target_col,
-        )
-        self.results["context"] = infer_domain(
-            self.results["signals"],
-            analysis_df,
-        )
+        
+        # Step 4: Extract signals (NEW)
+        self.results["signals"] = extract_signals(self.data, target_col)
+        
+        # Step 5: Infer domain (UPGRADED)
+        self.results["context"] = infer_domain(self.results["signals"], self.data)
+        
+        # Step 6: Data quality
+        self.calculate_data_quality()
+        
+        # Step 7: Visualizations
+        self.visualizations(output_dir)
+        
+        # Step 8: Model comparison
+        self.generate_model_comparison()
+        
+        # Step 9: RCA diagnosis (NEW)
         self.results["diagnosis"] = diagnose(self.results["signals"], ml_results)
+        
+        # Step 10: Resolve conflicts (NEW - CRITICAL)
         self.results["verdict"] = resolve_conflicts(
             self.results["signals"],
             self.results["context"].get("domain", "generic"),
             self.results["diagnosis"],
-            [],
+            []
         )
+        
+        # Step 11: Generate recommendations (UPGRADED)
         self.results["recommendations"] = recommend(
             self.results["context"].get("domain", "generic"),
-            self.results["diagnosis"],
-            self.results["verdict"],
+            self.results["diagnosis"]
         )
-        self.results["confidence"] = calculate_confidence(
-            self.results["signals"],
-            self.results["diagnosis"],
-            self.results["verdict"],
-        )
-
-        multicollinearity_summary = self.multicollinearity_pipeline(ml_results.get("target_column"))
-        feature_matrix, target_values = self._prepare_model_data(ml_results.get("target_column"))
-        self.results["model_comparison"] = train_multiple_models(feature_matrix, target_values)
-        self.results["root_cause_analysis"] = self.root_cause_pipeline(
-            ml_results, multicollinearity_summary, self.results["data_quality"]
-        )
-        self.visualizations(output_dir)
-
+        
+        # Step 12: Multicollinearity detection
+        multicollinearity = self.detect_multicollinearity()
+        
+        # Step 13: Generate insights
+        self.generate_insights(quality_summary, multicollinearity)
+        
+        # Step 14: Calculate confidence
+        self.calculate_confidence_scores()
+        
+        # Step 15: Validate
+        self.validate_consistency()
+        
         return {
             "html": self.generate_html_report(output_dir),
             "json": self.export_json(output_dir),
@@ -337,7 +351,5 @@ if __name__ == "__main__":
     print(f"JSON output: {output['json']}")
     print("Top insights:")
     for item in analyzer.results.get("insights", []):
-        if isinstance(item, dict):
-            print(f"- [{item.get('severity')}/{item.get('confidence')}] {item.get('content')}")
-        else:
-            print(f"- {item}")
+        content = item.get("content", "No content") if isinstance(item, dict) else str(item)
+        print(f"- {content}")
