@@ -16,7 +16,7 @@ def infer_domain(signals: Dict, df: pd.DataFrame) -> Dict:
     evidence: List[str] = []
     scores = {domain: sum(1 for token in words if token in column_text) for domain, words in DOMAIN_KEYWORDS.items()}
 
-    domain = max(scores, key=scores.get) if scores else "generic"
+    domain = max(scores, key=scores.get, default="generic")
     best_score = int(scores.get(domain, 0))
     if best_score <= 0:
         domain = "generic"

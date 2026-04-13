@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Dict, List, Tuple
 
+# Rule tuple format: (priority, action, impact, effort)
+
 RULES: Dict[str, Dict[str, List[Tuple[str, str, str, str]]]] = {
     "real_estate": {
         "feature_gap": [

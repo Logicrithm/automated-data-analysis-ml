@@ -103,8 +103,10 @@ def build_html_report(results: Dict, visuals: Dict[str, str]) -> str:
   <div class="section executive">
     <h2>Executive Summary</h2>
     <p><strong>Primary Issue:</strong> {html.escape(primary_issue.replace('_', ' ').title())}</p>
-    <p><strong>Verdict Confidence:</strong> {float(verdict.get('confidence', 0.0)):.2f} | <strong>Overall Confidence:</strong> {float(confidence.get('overall', 0.0)):.2f}</p>
-    <p><strong>Model R²:</strong> {html.escape(str(model_results.get('r2_score', 'N/A')))} | <strong>Target:</strong> {html.escape(str(model_results.get('target_column', 'None')))}</p>
+    <p><strong>Verdict Confidence:</strong> {float(verdict.get('confidence', 0.0)):.2f}</p>
+    <p><strong>Overall Confidence:</strong> {float(confidence.get('overall', 0.0)):.2f}</p>
+    <p><strong>Model R²:</strong> {html.escape(str(model_results.get('r2_score', 'N/A')))}</p>
+    <p><strong>Target:</strong> {html.escape(str(model_results.get('target_column', 'None')))}</p>
   </div>
 
   <div class="section">
