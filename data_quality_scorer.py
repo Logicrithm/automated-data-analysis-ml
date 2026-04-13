@@ -5,6 +5,9 @@ from typing import Dict
 import numpy as np
 import pandas as pd
 
+TYPE_DIVERSITY_THRESHOLD = 2
+CONSISTENCY_PENALTY = 10.0
+
 
 def _grade(score: float) -> str:
     if score >= 90:
@@ -25,15 +28,18 @@ def calculate_data_quality_score(df: pd.DataFrame) -> Dict:
     completeness = float((df.notna().all(axis=1).sum() / total_rows) * 100)
     uniqueness = float((1 - (df.duplicated().sum() / total_rows)) * 100)
 
-    consistency = 100.0
+    consistency_issue_columns = 0
     for column in df.columns:
         non_null = df[column].dropna()
         if non_null.empty:
             continue
         python_types = non_null.map(type).nunique()
-        if python_types > 2:
-            consistency -= 10
-    consistency = max(0.0, consistency)
+        if python_types > TYPE_DIVERSITY_THRESHOLD:
+            consistency_issue_columns += 1
+    consistency = max(
+        0.0,
+        100.0 - ((consistency_issue_columns / total_features) * 100.0 * (CONSISTENCY_PENALTY / 100.0)),
+    )
 
     numeric_df = df.select_dtypes(include=[np.number]).replace([np.inf, -np.inf], np.nan)
     plausibility = 100.0

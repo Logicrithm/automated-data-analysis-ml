@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Dict, List
 
+# Treat R² below 0.30 as weak predictive utility for action prioritization.
 LOW_MODEL_THRESHOLD = 0.3
 
 
@@ -29,7 +30,7 @@ def _deduplicate(items: List[Dict]) -> List[Dict]:
     seen = set()
     deduped: List[Dict] = []
     for item in items:
-        key = (item.get("category"), item.get("content"))
+        key = " ".join(str(item.get("content", "")).lower().split())
         if key in seen:
             continue
         seen.add(key)
@@ -37,7 +38,7 @@ def _deduplicate(items: List[Dict]) -> List[Dict]:
     return deduped
 
 
-def generate_ranked_insights(results: Dict, quality_summary: Dict, confidence: Dict[str, float]) -> List[Dict]:
+def generate_ranked_insights(results: Dict, quality_summary: Dict, confidence_scores: Dict[str, float]) -> List[Dict]:
     ml_results = results.get("ml_results") or {}
     multicollinearity = results.get("multicollinearity") or {}
     recommendations = (results.get("recommendations") or {}).get("recommendations") or []
@@ -63,7 +64,7 @@ def generate_ranked_insights(results: Dict, quality_summary: Dict, confidence: D
                 f"({strongest_feature} strongest), leaving {unexplained_pct:.1f}% unexplained."
             ),
             root_cause=rca.get("root_cause", "Feature set insufficient for robust prediction."),
-            confidence=confidence,
+            confidence=confidence_scores,
             actions=model_actions,
         )
     )
@@ -83,7 +84,7 @@ def generate_ranked_insights(results: Dict, quality_summary: Dict, confidence: D
                     f"(VIF={vif_map.get(pair['feature_b'], 0.0):.1f})."
                 ),
                 root_cause="Redundant features are measuring similar signal.",
-                confidence={**confidence, "finding": 0.99},
+                confidence={**confidence_scores, "finding": 0.99},
                 actions=[item for item in recommendations if item.get("priority") in {"CRITICAL", "HIGH"}][:3],
             )
         )
@@ -107,7 +108,7 @@ def generate_ranked_insights(results: Dict, quality_summary: Dict, confidence: D
             category="DATA_QUALITY",
             content=quality_text,
             root_cause="Outliers and schema consistency influence downstream reliability.",
-            confidence=confidence,
+            confidence=confidence_scores,
             actions=[{"priority": "HIGH", "action": "Apply data cleaning checks"}],
         )
     )
@@ -122,7 +123,7 @@ def generate_ranked_insights(results: Dict, quality_summary: Dict, confidence: D
                 f"({context.get('confidence', 'LOW')} confidence): {context.get('context', 'Generic dataset')}."
             ),
             root_cause="Domain context inferred from column keywords and structure.",
-            confidence=confidence,
+            confidence=confidence_scores,
             actions=[{"priority": "MEDIUM", "action": "Validate inferred domain with stakeholder input"}],
         )
     )

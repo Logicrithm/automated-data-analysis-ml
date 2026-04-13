@@ -44,7 +44,7 @@ def train_multiple_models(X: pd.DataFrame, y: pd.Series) -> Dict:
         ("Gradient Boosting", GradientBoostingRegressor(random_state=RANDOM_STATE), "MEDIUM"),
     ]
 
-    records: List[Dict] = []
+    raw_records: List[Dict] = []
     for name, model, interpretability in model_specs:
         start = time.perf_counter()
         model.fit(x_train, y_train)
@@ -52,16 +52,34 @@ def train_multiple_models(X: pd.DataFrame, y: pd.Series) -> Dict:
         preds = model.predict(x_test)
         r2_value = r2_score(y_test, preds)
         rmse = np.sqrt(mean_squared_error(y_test, preds))
-        recommendation = (
-            "BASELINE - Too weak"
-            if name == "Linear Regression" and r2_value < 0.3
-            else "GOOD - Use if speed matters"
-            if name == "Random Forest"
-            else "BEST - Recommended"
-        )
-        records.append(
-            _model_record(name, r2_value, rmse, duration, interpretability, recommendation)
+        raw_records.append(
+            {
+                "name": name,
+                "r2": r2_value,
+                "rmse": rmse,
+                "training_time": duration,
+                "interpretability": interpretability,
+            }
         )
 
-    best = max(records, key=lambda item: item["r2_score"]) if records else None
-    return {"models": records, "best_model": best["name"] if best else None}
+    best = max(raw_records, key=lambda item: item["r2"]) if raw_records else None
+    best_name = best["name"] if best else None
+    records: List[Dict] = []
+    for item in raw_records:
+        if best_name and item["name"] == best_name:
+            recommendation = "BEST - Recommended"
+        elif item["r2"] < 0.3:
+            recommendation = "BASELINE - Too weak"
+        else:
+            recommendation = "GOOD - Use if speed matters"
+        records.append(
+            _model_record(
+                item["name"],
+                item["r2"],
+                item["rmse"],
+                item["training_time"],
+                item["interpretability"],
+                recommendation,
+            )
+        )
+    return {"models": records, "best_model": best_name}

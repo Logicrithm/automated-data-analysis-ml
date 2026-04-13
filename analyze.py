@@ -19,6 +19,17 @@ from recommendation_engine import generate_rule_chained_recommendations
 from visualization import generate_visualizations
 
 RANDOM_STATE = 42
+ACTIONABILITY_CRITICAL = 0.9
+ACTIONABILITY_DEFAULT = 0.7
+DOMAIN_CONFIDENCE_HIGH = 0.85
+DOMAIN_CONFIDENCE_MEDIUM = 0.65
+DOMAIN_CONFIDENCE_LOW = 0.4
+DOMAIN_CONFIDENCE_DEFAULT = 0.5
+DOMAIN_CONFIDENCE_MAP = {
+    "HIGH": DOMAIN_CONFIDENCE_HIGH,
+    "MEDIUM": DOMAIN_CONFIDENCE_MEDIUM,
+    "LOW": DOMAIN_CONFIDENCE_LOW,
+}
 
 
 class DataAnalyzer:
@@ -155,7 +166,7 @@ class DataAnalyzer:
             ml_results["multicollinearity_warning"] = ""
         return summary
 
-    def _prepare_features(self, target_column: Optional[str]) -> tuple[pd.DataFrame, pd.Series]:
+    def _prepare_model_data(self, target_column: Optional[str]) -> tuple[pd.DataFrame, pd.Series]:
         if self.data is None or not target_column or target_column not in self.data.columns:
             return pd.DataFrame(), pd.Series(dtype=float)
         working_df = self.data.dropna(subset=[target_column]).copy()
@@ -260,7 +271,7 @@ class DataAnalyzer:
         self.results["data_quality"] = calculate_data_quality_score(self.data) if self.data is not None else {}
         ml_results = self.ml_pipeline(target_column)
         multicollinearity_summary = self.multicollinearity_pipeline(ml_results.get("target_column"))
-        feature_matrix, target_values = self._prepare_features(ml_results.get("target_column"))
+        feature_matrix, target_values = self._prepare_model_data(ml_results.get("target_column"))
         self.results["model_comparison"] = train_multiple_models(feature_matrix, target_values)
         self.results["root_cause_analysis"] = self.root_cause_pipeline(
             ml_results, multicollinearity_summary, self.results["data_quality"]
@@ -279,15 +290,19 @@ class DataAnalyzer:
             multicollinearity_summary.get("vif", []),
         )
         self.results["recommendations"] = recommendations
-        domain_confidence = {"HIGH": 0.85, "MEDIUM": 0.65, "LOW": 0.4}.get(
-            self.results["context"].get("confidence"), 0.5
+        domain_confidence = DOMAIN_CONFIDENCE_MAP.get(
+            self.results["context"].get("confidence"), DOMAIN_CONFIDENCE_DEFAULT
         )
         top_importance = ml_results.get("standardized_importance") or []
         feature_relevance = min(float(top_importance[0].get("importance", 0.0)), 1.0) if top_importance else 0.3
         data_quality_score = float(
             (self.results["data_quality"].get("data_quality") or {}).get("overall_score", 0.0) / 100.0
         )
-        actionability = 0.9 if any(item.get("priority") == "CRITICAL" for item in recommendations["recommendations"]) else 0.7
+        actionability = (
+            ACTIONABILITY_CRITICAL
+            if any(item.get("priority") == "CRITICAL" for item in recommendations["recommendations"])
+            else ACTIONABILITY_DEFAULT
+        )
         self.results["confidence"] = calculate_weighted_confidence(
             data_quality=data_quality_score,
             model_performance=max(0.0, min(1.0, float(ml_results.get("r2_score", 0.0)))),
