@@ -11,10 +11,6 @@ def _warning_block(ml_results: Dict) -> str:
     if not ml_results:
         return ""
 
-    multicollinearity_warning = str(ml_results.get("multicollinearity_warning", "")).strip()
-    if multicollinearity_warning:
-        return ""
-
     severity = ml_results.get("severity", "ok")
     classes = {
         "critical": "warning critical",

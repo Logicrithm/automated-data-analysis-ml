@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Dict, List
 
+LOW_MODEL_THRESHOLD = 0.5
+
 
 def _deduplicate(items: List[Dict]) -> List[Dict]:
     seen = set()
@@ -37,15 +39,20 @@ def generate_ranked_insights(results: Dict, quality_summary: Dict, confidence_le
     if ml_results.get("problem_type") == "regression":
         target_column = ml_results.get("target_column", "target")
         strongest_feature = ml_results.get("strongest_feature", "top feature")
-        explained_pct = max(0.0, min(100.0, r2_value * 100))
+        explained_pct = r2_value * 100
         unexplained_pct = 100.0 - explained_pct
+        performance_suffix = ""
+        if r2_value < 0:
+            performance_suffix = " Model performance is worse than a mean-baseline predictor."
+        performance_message = (
+            f"Model explains only {explained_pct:.1f}% of {target_column} variance with "
+            f"{strongest_feature} as strongest predictor, leaving {unexplained_pct:.1f}% unexplained."
+            f"{performance_suffix}"
+        )
         insights.append(
             _insight(
-                (
-                    f"Model explains only {explained_pct:.1f}% of {target_column} variance with "
-                    f"{strongest_feature} as strongest predictor, leaving {unexplained_pct:.1f}% unexplained."
-                ),
-                "CRITICAL" if r2_value < 0.5 else "MEDIUM",
+                performance_message,
+                "CRITICAL" if r2_value < LOW_MODEL_THRESHOLD else "MEDIUM",
                 _confidence(confidence_levels, "MODEL_PERFORMANCE"),
                 True,
                 "MODEL_PERFORMANCE",
@@ -59,7 +66,8 @@ def generate_ranked_insights(results: Dict, quality_summary: Dict, confidence_le
             feature_a = pair["feature_a"]
             feature_b = pair["feature_b"]
             corr = float(pair["correlation"])
-            vif_map = {item["feature"]: item["vif"] for item in high_vif_features}
+            vif_records = multicollinearity.get("vif") or []
+            vif_map = {item["feature"]: item["vif"] for item in vif_records}
             insights.append(
                 _insight(
                     (
@@ -85,7 +93,7 @@ def generate_ranked_insights(results: Dict, quality_summary: Dict, confidence_le
                 )
             )
 
-        if r2_value < 0.6:
+        if r2_value < LOW_MODEL_THRESHOLD:
             insights.append(
                 _insight(
                     "Likely missing: neighborhood/location quality, property condition rating, property age, lot size, amenities proximity—these typically drive 40-60% of price variance.",
@@ -102,7 +110,7 @@ def generate_ranked_insights(results: Dict, quality_summary: Dict, confidence_le
         quality_msg = (
             f"Data quality is excellent (zero missing values, {duplicate_rows} duplicates detected). "
             "However, feature selection is insufficient - domain knowledge needed for additional features."
-            if r2_value < 0.6
+            if r2_value < LOW_MODEL_THRESHOLD
             else f"Data quality is strong (zero missing values, {duplicate_rows} duplicates detected)."
         )
         insights.append(

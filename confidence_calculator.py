@@ -2,6 +2,15 @@ from __future__ import annotations
 
 from typing import Dict
 
+R2_THRESHOLD_LOW = 0.2
+R2_THRESHOLD_HIGH = 0.7
+R2_THRESHOLD_MID = 0.4
+DOMAIN_SCORE_HIGH = 0.6
+DOMAIN_SCORE_DEFAULT = 0.45
+FEATURE_SCORE_WEAK = 0.3
+FEATURE_SCORE_MODERATE = 0.65
+FEATURE_SCORE_STRONG_BONUS = 0.2
+
 
 def _clamp_level(value: float) -> str:
     if value >= 0.75:
@@ -28,21 +37,25 @@ def calculate_confidence_levels(
         data_quality_score -= 0.3
 
     model_score = 0.5
-    if r2_value <= 0.2 or r2_value >= 0.7:
+    if r2_value >= R2_THRESHOLD_HIGH:
         model_score += 0.35
-    elif r2_value <= 0.4:
-        model_score += 0.15
+    elif r2_value <= R2_THRESHOLD_LOW:
+        model_score -= 0.2
+    elif r2_value <= R2_THRESHOLD_MID:
+        model_score += 0.05
 
     strongest_importance = 0.0
     standardized = ml_results.get("standardized_importance") or []
     if standardized:
         strongest_importance = float(standardized[0].get("importance", 0.0))
-    feature_relevance_score = 0.3 if strongest_importance <= 0 else 0.65
+    feature_relevance_score = FEATURE_SCORE_WEAK if strongest_importance <= 0 else FEATURE_SCORE_MODERATE
     if strongest_importance > 0.5:
-        feature_relevance_score += 0.2
+        feature_relevance_score += FEATURE_SCORE_STRONG_BONUS
 
     target_name = str(ml_results.get("target_column", "")).lower()
-    domain_score = 0.6 if any(token in target_name for token in ("price", "value", "cost")) else 0.45
+    domain_score = (
+        DOMAIN_SCORE_HIGH if any(token in target_name for token in ("price", "value", "cost")) else DOMAIN_SCORE_DEFAULT
+    )
 
     multicollinearity_score = 0.5
     if multicollinearity_summary.get("high_vif_pairs"):

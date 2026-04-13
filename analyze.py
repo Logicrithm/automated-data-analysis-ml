@@ -97,7 +97,9 @@ class DataAnalyzer:
 
         feature_df = self.data.drop(columns=[target_column])
         feature_df = pd.get_dummies(feature_df, drop_first=True)
-        feature_df = feature_df.select_dtypes(include=[np.number]).replace([np.inf, -np.inf], np.nan).fillna(0)
+        feature_df = feature_df.select_dtypes(include=[np.number]).replace([np.inf, -np.inf], np.nan)
+        feature_df = feature_df.fillna(feature_df.median(numeric_only=True))
+        feature_df = feature_df.fillna(0)
         if feature_df.empty or feature_df.shape[1] < 2:
             summary = {"high_vif_features": [], "high_vif_pairs": [], "vif": []}
             self.results["multicollinearity"] = summary
