@@ -2,148 +2,144 @@ from __future__ import annotations
 
 from typing import Dict, List
 
-LOW_MODEL_THRESHOLD = 0.5
+# Treat R² below 0.30 as weak predictive utility for action prioritization.
+LOW_MODEL_THRESHOLD = 0.3
+
+
+def _insight(
+    rank: int,
+    severity: str,
+    category: str,
+    content: str,
+    root_cause: str,
+    confidence: Dict[str, float],
+    actions: List[Dict],
+) -> Dict:
+    return {
+        "rank": rank,
+        "severity": severity,
+        "category": category,
+        "content": content,
+        "root_cause": root_cause,
+        "confidence": confidence,
+        "actions": actions,
+    }
+
+
+def _content_fingerprint(content: str) -> str:
+    return " ".join(str(content).lower().split())
 
 
 def _deduplicate(items: List[Dict]) -> List[Dict]:
     seen = set()
     deduped: List[Dict] = []
     for item in items:
-        normalized = str(item.get("content", "")).strip()
-        if normalized and normalized not in seen:
-            seen.add(normalized)
-            deduped.append(item)
+        key = _content_fingerprint(str(item.get("content", "")))
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(item)
     return deduped
 
 
-def _confidence(confidence_levels: Dict[str, str], category: str, default: str = "MEDIUM") -> str:
-    return confidence_levels.get(category, default)
-
-
-def _insight(content: str, severity: str, confidence: str, actionable: bool, category: str) -> Dict:
-    return {
-        "content": content,
-        "severity": severity,
-        "confidence": confidence,
-        "actionable": actionable,
-        "category": category,
-    }
-
-
-def generate_ranked_insights(results: Dict, quality_summary: Dict, confidence_levels: Dict[str, str]) -> List[Dict]:
-    insights: List[Dict] = []
-
+def generate_ranked_insights(results: Dict, quality_summary: Dict, confidence_scores: Dict[str, float]) -> List[Dict]:
     ml_results = results.get("ml_results") or {}
     multicollinearity = results.get("multicollinearity") or {}
+    recommendations = (results.get("recommendations") or {}).get("recommendations") or []
+    rca = results.get("root_cause_analysis") or {}
+    context = results.get("context") or {}
+    data_quality = (results.get("data_quality") or {}).get("data_quality") or {}
+
     r2_value = float(ml_results.get("r2_score", 0.0))
-    if ml_results.get("problem_type") == "regression":
-        target_column = ml_results.get("target_column", "target")
-        strongest_feature = ml_results.get("strongest_feature", "top feature")
-        explained_pct = r2_value * 100
-        unexplained_pct = 100.0 - explained_pct
-        performance_suffix = ""
-        if r2_value < 0:
-            performance_suffix = " Model performance is worse than a mean-baseline predictor."
-        performance_message = (
-            f"Model explains only {explained_pct:.1f}% of {target_column} variance with "
-            f"{strongest_feature} as strongest predictor, leaving {unexplained_pct:.1f}% unexplained."
-            f"{performance_suffix}"
-        )
-        insights.append(
-            _insight(
-                performance_message,
-                "CRITICAL" if r2_value < LOW_MODEL_THRESHOLD else "MEDIUM",
-                _confidence(confidence_levels, "MODEL_PERFORMANCE"),
-                True,
-                "MODEL_PERFORMANCE",
-            )
-        )
+    target_column = ml_results.get("target_column", "target")
+    strongest_feature = ml_results.get("strongest_feature", "top feature")
+    explained_pct = r2_value * 100
+    unexplained_pct = 100.0 - explained_pct
 
-        high_vif_pairs = multicollinearity.get("high_vif_pairs") or []
-        high_vif_features = multicollinearity.get("high_vif_features") or []
-        if high_vif_pairs:
-            pair = high_vif_pairs[0]
-            feature_a = pair["feature_a"]
-            feature_b = pair["feature_b"]
-            corr = float(pair["correlation"])
-            vif_records = multicollinearity.get("vif") or []
-            vif_map = {item["feature"]: item["vif"] for item in vif_records}
-            insights.append(
-                _insight(
-                    (
-                        f"Strong multicollinearity detected: {feature_a} (VIF={vif_map.get(feature_a, 0.0):.1f}) "
-                        f"correlates {corr:.2f} with {feature_b} (VIF={vif_map.get(feature_b, 0.0):.1f}). "
-                        "This distorts model coefficients."
-                    ),
-                    "HIGH",
-                    _confidence(confidence_levels, "MULTICOLLINEARITY", "HIGH"),
-                    True,
-                    "MULTICOLLINEARITY",
-                )
-            )
-        elif high_vif_features:
-            top = high_vif_features[0]
-            insights.append(
-                _insight(
-                    f"Strong multicollinearity detected: {top['feature']} has VIF {top['vif']:.1f}, which can distort coefficients.",
-                    "HIGH",
-                    _confidence(confidence_levels, "MULTICOLLINEARITY", "MEDIUM"),
-                    True,
-                    "MULTICOLLINEARITY",
-                )
-            )
-
-        if r2_value < LOW_MODEL_THRESHOLD:
-            insights.append(
-                _insight(
-                    "Likely missing: neighborhood/location quality, property condition rating, property age, lot size, amenities proximity—these typically drive 40-60% of price variance.",
-                    "HIGH",
-                    _confidence(confidence_levels, "FEATURES"),
-                    True,
-                    "FEATURES",
-                )
-            )
-
-    total_missing = int(quality_summary.get("total_missing", 0))
-    duplicate_rows = int(quality_summary.get("duplicate_rows", 0))
-    if total_missing == 0:
-        quality_msg = (
-            f"Data quality is excellent (zero missing values, {duplicate_rows} duplicates detected). "
-            "However, feature selection is insufficient - domain knowledge needed for additional features."
-            if r2_value < LOW_MODEL_THRESHOLD
-            else f"Data quality is strong (zero missing values, {duplicate_rows} duplicates detected)."
-        )
-        insights.append(
-            _insight(
-                quality_msg,
-                "MEDIUM",
-                _confidence(confidence_levels, "DATA_QUALITY"),
-                bool(r2_value < 0.6),
-                "DATA_QUALITY",
-            )
-        )
-    else:
-        insights.append(
-            _insight(
-                f"Data quality issue detected: found {total_missing} missing values and {duplicate_rows} duplicate rows that should be handled before modeling.",
-                "HIGH",
-                _confidence(confidence_levels, "DATA_QUALITY", "HIGH"),
-                True,
-                "DATA_QUALITY",
-            )
-        )
-
+    insights: List[Dict] = []
+    model_actions = recommendations[:3]
+    performance_prefix = (
+        f"Model performs worse than baseline (R²={r2_value:.3f}). "
+        if r2_value < 0
+        else ""
+    )
     insights.append(
         _insight(
-            "Recommendations: (1) Collect location-based features, (2) Add property condition ratings, (3) Try non-linear models (Random Forest), (4) Apply feature interaction terms.",
-            "MEDIUM",
-            _confidence(confidence_levels, "RECOMMENDATIONS"),
-            True,
-            "FEATURES",
+            rank=1,
+            severity="CRITICAL" if r2_value < LOW_MODEL_THRESHOLD else "MEDIUM",
+            category="MODEL_PERFORMANCE",
+            content=(
+                f"{performance_prefix}Model explains only {explained_pct:.1f}% of {target_column} variance "
+                f"({strongest_feature} strongest), leaving {unexplained_pct:.1f}% unexplained."
+            ),
+            root_cause=rca.get("root_cause", "Feature set insufficient for robust prediction."),
+            confidence=confidence_scores,
+            actions=model_actions,
         )
     )
 
-    severity_rank = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3}
+    high_vif_pairs = multicollinearity.get("high_vif_pairs") or []
+    if high_vif_pairs:
+        pair = high_vif_pairs[0]
+        vif_map = {item["feature"]: item["vif"] for item in (multicollinearity.get("vif") or [])}
+        insights.append(
+            _insight(
+                rank=2,
+                severity="HIGH",
+                category="MULTICOLLINEARITY",
+                content=(
+                    f"Strong multicollinearity: {pair['feature_a']} (VIF={vif_map.get(pair['feature_a'], 0.0):.1f}) "
+                    f"correlates {pair['correlation']:.2f} with {pair['feature_b']} "
+                    f"(VIF={vif_map.get(pair['feature_b'], 0.0):.1f})."
+                ),
+                root_cause="Redundant features are measuring similar signal.",
+                confidence={**confidence_scores, "finding": 0.99},
+                actions=[item for item in recommendations if item.get("priority") in {"CRITICAL", "HIGH"}][:3],
+            )
+        )
+
+    total_missing = int(quality_summary.get("total_missing", 0))
+    duplicate_rows = int(quality_summary.get("duplicate_rows", 0))
+    quality_text = (
+        f"Data quality score is {data_quality.get('overall_score', 0):.1f}/100 with grade "
+        f"{(results.get('data_quality') or {}).get('grade', 'N/A')}."
+    )
+    if total_missing or duplicate_rows:
+        quality_text += (
+            f" Found {total_missing} missing values and {duplicate_rows} duplicate rows needing treatment."
+        )
+    else:
+        quality_text += " Completeness and uniqueness are strong."
+    insights.append(
+        _insight(
+            rank=3,
+            severity="MEDIUM",
+            category="DATA_QUALITY",
+            content=quality_text,
+            root_cause="Outliers and schema consistency influence downstream reliability.",
+            confidence=confidence_scores,
+            actions=[{"priority": "HIGH", "action": "Apply data cleaning checks"}],
+        )
+    )
+
+    insights.append(
+        _insight(
+            rank=4,
+            severity="MEDIUM",
+            category="CONTEXT",
+            content=(
+                f"Domain inferred as {context.get('domain', 'generic')} "
+                f"({context.get('confidence', 'LOW')} confidence): {context.get('context', 'Generic dataset')}."
+            ),
+            root_cause="Domain context inferred from column keywords and structure.",
+            confidence=confidence_scores,
+            actions=[{"priority": "MEDIUM", "action": "Validate inferred domain with stakeholder input"}],
+        )
+    )
+
     deduped = _deduplicate(insights)
-    deduped.sort(key=lambda item: severity_rank.get(item.get("severity"), 99))
-    return deduped[:6]
+    severity_rank = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3}
+    deduped.sort(key=lambda item: (severity_rank.get(item.get("severity"), 99), item.get("rank", 99)))
+    for idx, item in enumerate(deduped, start=1):
+        item["rank"] = idx
+    return deduped

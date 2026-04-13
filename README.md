@@ -4,8 +4,11 @@ Intelligent system for automated data analysis, pattern detection, and ML model 
 
 ## Features
 ✅ Data quality assessment  
-✅ Correlation analysis  
-✅ Linear Regression with feature importance  
+✅ Context/domain inference (real estate / healthcare / business / generic)  
+✅ Rule-chained recommendations with priority  
+✅ Weighted confidence scoring (finding/reliability/domain/actionable/overall)  
+✅ Linear + Random Forest + Gradient Boosting comparison  
+✅ Enhanced root-cause chain reasoning  
 ✅ Professional HTML reports  
 ✅ Model failure diagnosis
 
