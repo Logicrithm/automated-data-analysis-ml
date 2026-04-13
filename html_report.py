@@ -26,72 +26,50 @@ def _visual_block(name: str, path: str) -> str:
     )
 
 
-def _actions_html(actions: List[Dict]) -> str:
-    if not actions:
-        return "<div class='recommendations'><div class='action medium'>No recommended actions.</div></div>"
-    allowed_priorities = {"critical", "high", "medium", "low"}
-    default_priority = "medium"
+def _priority_class(priority: str) -> str:
+    normalized = (priority or "MEDIUM").lower()
+    return normalized if normalized in {"critical", "high", "medium", "low"} else "medium"
+
+
+def _render_recommendations(items: List[Dict]) -> str:
+    if not items:
+        return "<p>No recommendations generated.</p>"
     rows = []
-    for action in actions:
-        raw_priority = str(action.get("priority", "MEDIUM")).lower()
-        priority = raw_priority if raw_priority in allowed_priorities else default_priority
-        safe_css_class = html.escape(priority, quote=True)
+    for item in items:
+        priority = str(item.get("priority", "MEDIUM")).upper()
         rows.append(
-            "<div class='action {css_class}'>Action ({label}): {action_name}</div>".format(
-                css_class=safe_css_class,
-                label=html.escape(str(action.get("priority", "MEDIUM"))),
-                action_name=html.escape(str(action.get("action", ""))),
+            "<div class='recommendation {css}'><strong>{priority}</strong>: {action} "
+            "<span class='meta'>(Impact: {impact}, Effort: {effort})</span></div>".format(
+                css=_priority_class(priority),
+                priority=html.escape(priority),
+                action=html.escape(str(item.get("action", ""))),
+                impact=html.escape(str(item.get("impact", ""))),
+                effort=html.escape(str(item.get("effort", ""))),
             )
         )
-    return f"<div class='recommendations'>{''.join(rows)}</div>"
+    return "".join(rows)
 
 
 def build_html_report(results: Dict, visuals: Dict[str, str]) -> str:
-    insights: List[Dict] = results.get("insights", [])
     overview = results.get("overview", {})
-    ml_results = results.get("ml_results", {})
-    confidence = results.get("confidence", {})
     context = results.get("context", {})
-    data_quality = (results.get("data_quality") or {}).get("data_quality", {})
-    quality_grade = (results.get("data_quality") or {}).get("grade", "N/A")
-    model_comparison = (results.get("model_comparison") or {}).get("models") or []
-    best_model = (results.get("model_comparison") or {}).get("best_model")
+    diagnosis = results.get("diagnosis", {})
+    verdict = results.get("verdict", {})
+    confidence = results.get("confidence", {})
+    recommendations = (results.get("recommendations") or {}).get("recommendations") or []
+    model_results = results.get("ml_results", {})
 
-    visual_html = "".join(_visual_block(name, path) for name, path in visuals.items())
-    severity_class = {"CRITICAL": "critical", "HIGH": "high", "MEDIUM": "medium", "LOW": "low"}
-
-    insight_cards = []
-    for insight in insights:
-        severity = str(insight.get("severity", "MEDIUM")).upper()
-        insight_conf = insight.get("confidence") or confidence
-        reliability = float((insight_conf or {}).get("reliability", 0.0))
-        content = html.escape(str(insight.get("content", "")))
-        root_cause = html.escape(str(insight.get("root_cause", "")))
-        actions_html = _actions_html(insight.get("actions") or [])
-        insight_cards.append(
-            f"""
-            <div class="insight {severity_class.get(severity, 'medium')}">
-              <span class="severity">{"🚨 " if severity == "CRITICAL" else ""}{severity}</span>
-              <span class="confidence">{(insight_conf or {}).get("finding", 0):.2f}</span>
-              <span class="reliability">{reliability:.0%}</span>
-              <p>{content}</p>
-              <p><strong>Root cause:</strong> {root_cause}</p>
-              {actions_html}
-            </div>
-            """
-        )
-
-    model_rows = []
-    for model in model_comparison:
-        model_rows.append(
-            "<tr><td>{name}</td><td>{r2}</td><td>{rmse}</td><td>{time}s</td><td>{rec}</td></tr>".format(
-                name=html.escape(str(model.get("name", ""))),
-                r2=html.escape(str(model.get("r2_score", ""))),
-                rmse=html.escape(str(model.get("rmse", ""))),
-                time=html.escape(str(model.get("training_time", ""))),
-                rec=html.escape(str(model.get("recommendation", ""))),
+    primary_issue = str(verdict.get("primary_issue", "unknown"))
+    warning_banner = ""
+    if primary_issue in {"data_quality", "feature_gap", "multicollinearity"}:
+        warning_banner = (
+            "<div class='banner'><strong>Warning:</strong> Primary issue detected - {issue}.</div>".format(
+                issue=html.escape(primary_issue.replace("_", " ").title())
             )
         )
+    warning_section_html = warning_banner if warning_banner else "<p>No critical warning flags.</p>"
+
+    visual_html = "".join(_visual_block(name, path) for name, path in visuals.items())
 
     return f"""
 <!doctype html>
@@ -102,55 +80,55 @@ def build_html_report(results: Dict, visuals: Dict[str, str]) -> str:
   <style>
     body {{ font-family: Arial, sans-serif; margin: 24px; color: #1f2937; }}
     h1, h2 {{ margin-bottom: 8px; }}
-    .section {{ margin-bottom: 28px; }}
-    .insight {{ padding: 12px 14px; border-radius: 8px; margin: 10px 0; border-left: 4px solid; }}
-    .critical {{ background: #fee2e2; color: #991b1b; border-color: #dc2626; }}
-    .high {{ background: #fef3c7; color: #92400e; border-color: #f59e0b; }}
-    .medium {{ background: #dbeafe; color: #1e40af; border-color: #3b82f6; }}
-    .low {{ background: #ecfeff; color: #155e75; border-color: #06b6d4; }}
-    .severity, .confidence, .reliability {{ display: inline-block; margin-right: 8px; font-weight: 700; }}
-    .recommendations {{ margin-top: 8px; }}
-    .action {{ padding: 6px 8px; border-radius: 6px; margin: 4px 0; }}
-    .action.critical {{ background: #fecaca; }}
-    .action.high {{ background: #fde68a; }}
-    .action.medium {{ background: #bfdbfe; }}
-    .model-comparison {{ width: 100%; border-collapse: collapse; margin-top: 8px; }}
-    .model-comparison th, .model-comparison td {{ border: 1px solid #e5e7eb; padding: 8px; text-align: left; }}
-    .quality-scorecard {{ padding: 12px; border-radius: 8px; background: #f8fafc; border: 1px solid #cbd5e1; }}
+    .section {{ margin-bottom: 24px; }}
+    .banner {{ background: #fee2e2; color: #991b1b; border: 1px solid #dc2626; border-radius: 8px; padding: 10px 12px; }}
+    .executive {{ background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px; }}
+    .diag-grid {{ display: grid; grid-template-columns: repeat(2, minmax(180px, 1fr)); gap: 8px; }}
+    .diag-item {{ background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 6px; padding: 8px; }}
+    .recommendation {{ padding: 8px 10px; border-radius: 6px; margin: 6px 0; border-left: 4px solid; }}
+    .critical {{ background: #fee2e2; border-color: #dc2626; }}
+    .high {{ background: #fef3c7; border-color: #f59e0b; }}
+    .medium {{ background: #dbeafe; border-color: #3b82f6; }}
+    .low {{ background: #ecfeff; border-color: #06b6d4; }}
+    .meta {{ color: #374151; font-size: 0.9em; }}
     .viz {{ margin-bottom: 16px; }}
     img {{ max-width: 100%; border: 1px solid #e5e7eb; border-radius: 6px; }}
   </style>
 </head>
 <body>
   <h1>Automated Data Analysis Report</h1>
+
+  <div class="section">{warning_section_html}</div>
+
+  <div class="section executive">
+    <h2>Executive Summary</h2>
+    <p><strong>Primary Issue:</strong> {html.escape(primary_issue.replace('_', ' ').title())}</p>
+    <p><strong>Verdict Confidence:</strong> {float(verdict.get('confidence', 0.0)):.2f}</p>
+    <p><strong>Overall Confidence:</strong> {float(confidence.get('overall', 0.0)):.2f}</p>
+    <p><strong>Model R²:</strong> {html.escape(str(model_results.get('r2_score', 'N/A')))}</p>
+    <p><strong>Target:</strong> {html.escape(str(model_results.get('target_column', 'None')))}</p>
+  </div>
+
   <div class="section">
     <h2>Context</h2>
-    <p>Domain: <strong>{html.escape(str(context.get('domain', 'generic')))}</strong> ({html.escape(str(context.get('confidence', 'LOW')))} confidence)</p>
-    <p>{html.escape(str(context.get('context', 'Generic dataset')))}</p>
+    <p><strong>Domain:</strong> {html.escape(str(context.get('domain', 'generic')))}</p>
+    <p><strong>Domain Confidence:</strong> {float(context.get('confidence', 0.0)):.2f}</p>
+    <p><strong>Evidence:</strong> {html.escape(', '.join(context.get('reasoning', []) or ['No evidence recorded']))}</p>
   </div>
 
   <div class="section">
-    <h2>Key Insights (Ranked by Severity)</h2>
-    {''.join(insight_cards) or '<p>No insights were generated.</p>'}
-  </div>
-
-  <div class="section">
-    <h2>Model Comparison</h2>
-    <table class="model-comparison">
-      <tr><th>Model</th><th>R² Score</th><th>RMSE</th><th>Speed</th><th>Recommendation</th></tr>
-      {''.join(model_rows) or '<tr><td colspan="5">No model comparison available.</td></tr>'}
-    </table>
-    <p><strong>Best model:</strong> {html.escape(str(best_model or 'N/A'))}</p>
-  </div>
-
-  <div class="section">
-    <h2>Data Quality</h2>
-    <div class="quality-scorecard">
-      Overall Score: {data_quality.get('overall_score', 0):.1f}/100 (Grade: {quality_grade})
-      <br/>Completeness: {data_quality.get('completeness', 0)} | Uniqueness: {data_quality.get('uniqueness', 0)} |
-      Consistency: {data_quality.get('consistency', 0)} | Plausibility: {data_quality.get('plausibility', 0)} |
-      Feature Richness: {data_quality.get('feature_richness', 0)}
+    <h2>Diagnosis</h2>
+    <div class="diag-grid">
+      <div class="diag-item"><strong>Model Performance:</strong> {html.escape(str(diagnosis.get('model_perf', 'unknown')))}</div>
+      <div class="diag-item"><strong>Feature Strength:</strong> {html.escape(str(diagnosis.get('feature_strength', 'unknown')))}</div>
+      <div class="diag-item"><strong>Multicollinearity:</strong> {html.escape(str(diagnosis.get('multicollinearity', 'unknown')))}</div>
+      <div class="diag-item"><strong>Data Quality:</strong> {html.escape(str(diagnosis.get('data_quality', 'unknown')))}</div>
     </div>
+  </div>
+
+  <div class="section">
+    <h2>Recommendations</h2>
+    {_render_recommendations(recommendations)}
   </div>
 
   <div class="section">
@@ -161,9 +139,6 @@ def build_html_report(results: Dict, visuals: Dict[str, str]) -> str:
   <div class="section">
     <h2>Dataset Summary</h2>
     <p>Rows: {overview.get('rows', 0):,} | Columns: {overview.get('columns', 0)}</p>
-    <p>Target Column: {ml_results.get('target_column', 'None')}</p>
-    <p>R² Score: {ml_results.get('r2_score', 'N/A')}</p>
-    <p>Overall confidence: {(confidence or {}).get('overall', 0):.2f}</p>
   </div>
 </body>
 </html>

@@ -8,14 +8,17 @@ import numpy as np
 import pandas as pd
 
 from analysis import choose_target_column, run_regression_analysis
-from confidence_calculator import calculate_weighted_confidence
-from context_layer import infer_context
+from confidence import calculate_confidence
 from data_quality_scorer import calculate_data_quality_score
+from conflict_resolver import resolve_conflicts
+from context import infer_domain
 from html_report import build_html_report
 from insights_generator import generate_ranked_insights
 from model_comparison import train_multiple_models
 from multicollinearity_detection import detect_multicollinearity
-from recommendation_engine import generate_rule_chained_recommendations
+from rca import diagnose
+from recommendations import recommend
+from signals import extract_signals
 from visualization import generate_visualizations
 
 RANDOM_STATE = 42
@@ -39,14 +42,17 @@ class DataAnalyzer:
         self.data: Optional[pd.DataFrame] = None
         self.results: Dict = {
             "overview": {},
+            "signals": {},
+            "context": {},
+            "diagnosis": {},
+            "verdict": {},
+            "recommendations": {},
+            "confidence": {},
             "quality_issues": [],
             "ml_results": {},
             "insights": [],
             "visualizations": {},
             "data_quality": {},
-            "context": {},
-            "recommendations": {},
-            "confidence": {},
             "model_comparison": {},
             "root_cause_analysis": {},
         }
@@ -268,57 +274,46 @@ class DataAnalyzer:
     def run_full_analysis(self, output_dir: str = "./output", target_column: Optional[str] = None) -> Dict:
         np.random.seed(RANDOM_STATE)
         self.load_data()
+        analysis_df = self.data if self.data is not None else pd.DataFrame()
         self.analyze_overview()
-        quality_summary = self.quality_detection()
-        self.results["data_quality"] = calculate_data_quality_score(self.data) if self.data is not None else {}
+        self.quality_detection()
+        self.results["data_quality"] = calculate_data_quality_score(analysis_df) if not analysis_df.empty else {}
         ml_results = self.ml_pipeline(target_column)
+        target_col = ml_results.get("target_column") or target_column
+
+        self.results["signals"] = extract_signals(
+            analysis_df,
+            target_col,
+        )
+        self.results["context"] = infer_domain(
+            self.results["signals"],
+            analysis_df,
+        )
+        self.results["diagnosis"] = diagnose(self.results["signals"], ml_results)
+        self.results["verdict"] = resolve_conflicts(
+            self.results["signals"],
+            self.results["context"].get("domain", "generic"),
+            self.results["diagnosis"],
+            [],
+        )
+        self.results["recommendations"] = recommend(
+            self.results["context"].get("domain", "generic"),
+            self.results["diagnosis"],
+            self.results["verdict"],
+        )
+        self.results["confidence"] = calculate_confidence(
+            self.results["signals"],
+            self.results["diagnosis"],
+            self.results["verdict"],
+        )
+
         multicollinearity_summary = self.multicollinearity_pipeline(ml_results.get("target_column"))
         feature_matrix, target_values = self._prepare_model_data(ml_results.get("target_column"))
         self.results["model_comparison"] = train_multiple_models(feature_matrix, target_values)
         self.results["root_cause_analysis"] = self.root_cause_pipeline(
             ml_results, multicollinearity_summary, self.results["data_quality"]
         )
-        self.results["context"] = infer_context(
-            self.data if self.data is not None else pd.DataFrame(),
-            {
-                "target_column": ml_results.get("target_column"),
-                "high_vif_pairs": multicollinearity_summary.get("high_vif_pairs"),
-            },
-        )
-        recommendations = generate_rule_chained_recommendations(
-            float(ml_results.get("r2_score", 0.0)),
-            multicollinearity_summary,
-            feature_matrix.shape[1] if not feature_matrix.empty else 0,
-            multicollinearity_summary.get("vif", []),
-        )
-        self.results["recommendations"] = recommendations
-        domain_confidence = DOMAIN_CONFIDENCE_MAP.get(
-            self.results["context"].get("confidence"), DOMAIN_CONFIDENCE_DEFAULT
-        )
-        top_importance = ml_results.get("standardized_importance") or []
-        feature_relevance = (
-            min(float(top_importance[0].get("importance", 0.0)), 1.0)
-            if top_importance
-            else DEFAULT_FEATURE_RELEVANCE
-        )
-        data_quality_score = float(
-            (self.results["data_quality"].get("data_quality") or {}).get("overall_score", 0.0) / 100.0
-        )
-        actionability = (
-            ACTIONABILITY_CRITICAL
-            if any(item.get("priority") == "CRITICAL" for item in recommendations["recommendations"])
-            else ACTIONABILITY_DEFAULT
-        )
-        self.results["confidence"] = calculate_weighted_confidence(
-            data_quality=data_quality_score,
-            model_performance=max(0.0, min(1.0, float(ml_results.get("r2_score", 0.0)))),
-            feature_relevance=max(0.0, feature_relevance),
-            domain_confidence=domain_confidence,
-            actionability=actionability,
-        )
         self.visualizations(output_dir)
-        self.generate_insights(quality_summary, self.results["confidence"])
-        self.validate_consistency()
 
         return {
             "html": self.generate_html_report(output_dir),
