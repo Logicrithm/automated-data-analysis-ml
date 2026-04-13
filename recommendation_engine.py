@@ -31,7 +31,7 @@ def generate_rule_chained_recommendations(
         if high_vif_pairs:
             top = high_vif_pairs[0]
             pair_text = (
-                f"{top['feature_a']} and {top['feature_b']} are {top['correlation'] * 100:.0f}% correlated."
+                f"{top['feature_a']} and {top['feature_b']} correlation is {top['correlation']:+.2f}."
             )
         recommendations.extend(
             [

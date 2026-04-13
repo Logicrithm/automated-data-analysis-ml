@@ -26,11 +26,15 @@ def _insight(
     }
 
 
+def _content_fingerprint(content: str) -> str:
+    return " ".join(str(content).lower().split())
+
+
 def _deduplicate(items: List[Dict]) -> List[Dict]:
     seen = set()
     deduped: List[Dict] = []
     for item in items:
-        key = " ".join(str(item.get("content", "")).lower().split())
+        key = _content_fingerprint(str(item.get("content", "")))
         if key in seen:
             continue
         seen.add(key)
@@ -49,18 +53,23 @@ def generate_ranked_insights(results: Dict, quality_summary: Dict, confidence_sc
     r2_value = float(ml_results.get("r2_score", 0.0))
     target_column = ml_results.get("target_column", "target")
     strongest_feature = ml_results.get("strongest_feature", "top feature")
-    explained_pct = max(0.0, r2_value * 100)
-    unexplained_pct = max(0.0, 100.0 - explained_pct)
+    explained_pct = r2_value * 100
+    unexplained_pct = 100.0 - explained_pct
 
     insights: List[Dict] = []
     model_actions = recommendations[:3]
+    performance_prefix = (
+        f"Model performs worse than baseline (R²={r2_value:.3f}). "
+        if r2_value < 0
+        else ""
+    )
     insights.append(
         _insight(
             rank=1,
             severity="CRITICAL" if r2_value < LOW_MODEL_THRESHOLD else "MEDIUM",
             category="MODEL_PERFORMANCE",
             content=(
-                f"Model explains only {explained_pct:.1f}% of {target_column} variance "
+                f"{performance_prefix}Model explains only {explained_pct:.1f}% of {target_column} variance "
                 f"({strongest_feature} strongest), leaving {unexplained_pct:.1f}% unexplained."
             ),
             root_cause=rca.get("root_cause", "Feature set insufficient for robust prediction."),

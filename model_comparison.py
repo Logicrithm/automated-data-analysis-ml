@@ -11,6 +11,7 @@ from sklearn.metrics import mean_squared_error, r2_score
 from sklearn.model_selection import train_test_split
 
 RANDOM_STATE = 42
+MIN_TRAIN_TEST_SAMPLES = 20
 
 
 def _model_record(
@@ -32,7 +33,7 @@ def _model_record(
 
 
 def train_multiple_models(X: pd.DataFrame, y: pd.Series) -> Dict:
-    if X.empty or len(X) < 20:
+    if X.empty or len(X) < MIN_TRAIN_TEST_SAMPLES:
         return {"models": [], "best_model": None}
 
     x_train, x_test, y_train, y_test = train_test_split(

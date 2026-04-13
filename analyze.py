@@ -30,6 +30,7 @@ DOMAIN_CONFIDENCE_MAP = {
     "MEDIUM": DOMAIN_CONFIDENCE_MEDIUM,
     "LOW": DOMAIN_CONFIDENCE_LOW,
 }
+DEFAULT_FEATURE_RELEVANCE = 0.3
 
 
 class DataAnalyzer:
@@ -167,6 +168,7 @@ class DataAnalyzer:
         return summary
 
     def _prepare_model_data(self, target_column: Optional[str]) -> tuple[pd.DataFrame, pd.Series]:
+        """Build model-ready feature matrix and target with encoding and numeric-safe imputation."""
         if self.data is None or not target_column or target_column not in self.data.columns:
             return pd.DataFrame(), pd.Series(dtype=float)
         working_df = self.data.dropna(subset=[target_column]).copy()
@@ -294,7 +296,11 @@ class DataAnalyzer:
             self.results["context"].get("confidence"), DOMAIN_CONFIDENCE_DEFAULT
         )
         top_importance = ml_results.get("standardized_importance") or []
-        feature_relevance = min(float(top_importance[0].get("importance", 0.0)), 1.0) if top_importance else 0.3
+        feature_relevance = (
+            min(float(top_importance[0].get("importance", 0.0)), 1.0)
+            if top_importance
+            else DEFAULT_FEATURE_RELEVANCE
+        )
         data_quality_score = float(
             (self.results["data_quality"].get("data_quality") or {}).get("overall_score", 0.0) / 100.0
         )

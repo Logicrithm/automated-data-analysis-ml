@@ -7,6 +7,8 @@ import pandas as pd
 
 TYPE_DIVERSITY_THRESHOLD = 2
 CONSISTENCY_PENALTY = 10.0
+# Convert penalty percent into a multiplier for consistency score reduction.
+CONSISTENCY_PENALTY_PERCENT_FACTOR = CONSISTENCY_PENALTY / 100.0
 
 
 def _grade(score: float) -> str:
@@ -38,7 +40,7 @@ def calculate_data_quality_score(df: pd.DataFrame) -> Dict:
             consistency_issue_columns += 1
     consistency = max(
         0.0,
-        100.0 - ((consistency_issue_columns / total_features) * 100.0 * (CONSISTENCY_PENALTY / 100.0)),
+        100.0 - ((consistency_issue_columns / total_features) * 100.0 * CONSISTENCY_PENALTY_PERCENT_FACTOR),
     )
 
     numeric_df = df.select_dtypes(include=[np.number]).replace([np.inf, -np.inf], np.nan)

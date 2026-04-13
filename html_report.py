@@ -30,10 +30,11 @@ def _actions_html(actions: List[Dict]) -> str:
     if not actions:
         return "<div class='recommendations'><div class='action medium'>No recommended actions.</div></div>"
     allowed_priorities = {"critical", "high", "medium", "low"}
+    default_priority = "medium"
     rows = []
     for action in actions:
         raw_priority = str(action.get("priority", "MEDIUM")).lower()
-        priority = raw_priority if raw_priority in allowed_priorities else "medium"
+        priority = raw_priority if raw_priority in allowed_priorities else default_priority
         safe_css_class = html.escape(priority, quote=True)
         rows.append(
             "<div class='action {css_class}'>Action ({label}): {action_name}</div>".format(

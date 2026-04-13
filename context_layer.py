@@ -25,6 +25,8 @@ DOMAIN_LIKELY_FEATURES = {
     "generic": ["domain_features", "interaction_terms", "external_signals", "time_features"],
 }
 CLASSIFICATION_SUFFIXES = ("class", "label", "diagnosis")
+MAX_UNIQUE_FOR_CLASSIFICATION = 20
+MAX_UNIQUE_RATIO_FOR_CLASSIFICATION = 0.05
 
 
 def infer_context(df: pd.DataFrame, rca_output: Dict) -> Dict:
@@ -52,7 +54,8 @@ def infer_context(df: pd.DataFrame, rca_output: Dict) -> Dict:
         unique_count = int(target_series.nunique(dropna=True))
         unique_ratio = unique_count / max(len(target_series), 1)
         is_discrete_numeric = pd.api.types.is_numeric_dtype(target_series) and (
-            unique_count <= 20 or unique_ratio <= 0.05
+            unique_count <= MAX_UNIQUE_FOR_CLASSIFICATION
+            or unique_ratio <= MAX_UNIQUE_RATIO_FOR_CLASSIFICATION
         )
         problem_type = "classification" if (not pd.api.types.is_numeric_dtype(target_series) or is_discrete_numeric) else "regression"
 
