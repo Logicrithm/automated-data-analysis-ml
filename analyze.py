@@ -23,9 +23,6 @@ from recommendations_new import recommend
 from conflict_resolver import resolve_conflicts
 from signals import extract_signals
 from visualization import generate_visualizations
-from feature_analysis import analyze_features
-from model_interpreter import interpret_models
-from deep_summary import generate_deep_summary
 
 RANDOM_STATE = 42
 
@@ -51,9 +48,6 @@ class DataAnalyzer:
             "visualizations": {},
             "data_quality": {},
             "model_comparison": {},
-            "feature_analysis": {},
-            "model_interpretation": {},
-            "deep_summary": {},
         }
 
     def load_data(self) -> pd.DataFrame:
@@ -340,22 +334,6 @@ class DataAnalyzer:
         
         # Step 15: Validate
         self.validate_consistency()
-
-                # Phase 3: Add deep analysis layers
-        feature_analysis = analyze_features(self.data, target_col)
-        self.results["feature_analysis"] = feature_analysis
-        
-        model_interpretation = interpret_models(ml_results, self.results["diagnosis"])
-        self.results["model_interpretation"] = model_interpretation
-        
-        deep_summary = generate_deep_summary(
-            self.results["signals"],
-            self.results["diagnosis"],
-            self.results["verdict"],
-            feature_analysis,
-            model_interpretation
-        )
-        self.results["deep_summary"] = deep_summary
 
         # Phase 3: Add deep analysis layers
         feature_analysis = analyze_features(self.data, target_col)
