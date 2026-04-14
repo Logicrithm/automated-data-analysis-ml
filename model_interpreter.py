@@ -48,7 +48,7 @@ def interpret_models(ml_results: dict, diagnosis: dict) -> dict:
             "is_model_limited": False,
         }
 
-    except:
+    except Exception:
         return {
             "interpretation": "Unable to interpret model results.",
             "is_data_limited": False,

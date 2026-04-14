@@ -61,7 +61,7 @@ def generate_deep_summary(
             "action_priority": action,
         }
 
-    except:
+    except Exception:
         return {
             "executive_insight": "Analysis complete.",
             "key_finding": "Review results and recommendations.",

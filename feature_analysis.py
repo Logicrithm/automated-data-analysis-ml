@@ -59,5 +59,5 @@ def analyze_features(df: pd.DataFrame, target_col: str) -> dict:
             "diversity_score": float(diversity),
         }
 
-    except:
+    except Exception:
         return {"weak_features": 0, "redundant_pairs": [], "feature_quality": 0, "diversity_score": 0}
