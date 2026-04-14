@@ -396,6 +396,25 @@ def build_html_report(results: Dict, visuals: Dict[str, str]) -> str:
             @media (max-width: 768px) {{
                 .summary-grid, .diagnosis-grid, .quality-metrics {{ grid-template-columns: 1fr; }}
             }}
+                        .deep-summary {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+                gap: 15px;
+                margin-top: 15px;
+            }
+            .insight-box, .finding-box, .action-box {
+                padding: 15px;
+                border-radius: 6px;
+                background: #f0f9ff;
+                border-left: 4px solid #0284c7;
+            }
+            .insight-box strong, .finding-box strong, .action-box strong {
+                display: block;
+                margin-bottom: 8px;
+                color: #1f2937;
+            }
+            .finding-box { background: #fef3c7; border-color: #f59e0b; }
+            .action-box { background: #fee2e2; border-color: #dc2626; }
         </style>
     </head>
     <body>
@@ -436,6 +455,23 @@ def build_html_report(results: Dict, visuals: Dict[str, str]) -> str:
                 {summary_html}
             </div>
         </div>
+                    <div class="section">
+                <h3>🧠 Deep Analysis Summary</h3>
+                <div class="deep-summary">
+                    <div class="insight-box">
+                        <strong>Executive Insight:</strong>
+                        <p>{html.escape(deep_summary.get('executive_insight', 'N/A'))}</p>
+                    </div>
+                    <div class="finding-box">
+                        <strong>Key Finding:</strong>
+                        <p>{html.escape(deep_summary.get('key_finding', 'N/A'))}</p>
+                    </div>
+                    <div class="action-box">
+                        <strong>Action Priority:</strong>
+                        <p>{html.escape(deep_summary.get('action_priority', 'N/A'))}</p>
+                    </div>
+                </div>
+            </div>
     </body>
     </html>
     """
