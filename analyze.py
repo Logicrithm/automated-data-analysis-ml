@@ -11,9 +11,12 @@ from analysis import choose_target_column, run_regression_analysis
 from confidence_calculator import calculate_weighted_confidence
 from context import infer_domain
 from data_quality_scorer import calculate_data_quality_score
+from deep_summary import generate_deep_summary
+from feature_analysis import analyze_features
 from html_report import build_html_report
 from insights_generator import generate_ranked_insights
 from model_comparison import train_multiple_models
+from model_interpreter import interpret_models
 from multicollinearity_detection import detect_multicollinearity
 from rca import diagnose
 from recommendations_new import recommend
@@ -42,6 +45,9 @@ class DataAnalyzer:
             "visualizations": {},
             "data_quality": {},
             "model_comparison": {},
+            "feature_analysis": {},
+            "model_interpretation": {},
+            "deep_summary": {},
         }
 
     def load_data(self) -> pd.DataFrame:
@@ -328,6 +334,22 @@ class DataAnalyzer:
         
         # Step 15: Validate
         self.validate_consistency()
+
+        # Phase 3: Add deep analysis layers
+        feature_analysis = analyze_features(self.data, target_col)
+        self.results["feature_analysis"] = feature_analysis
+
+        model_interpretation = interpret_models(ml_results, self.results["diagnosis"])
+        self.results["model_interpretation"] = model_interpretation
+
+        deep_summary = generate_deep_summary(
+            self.results["signals"],
+            self.results["diagnosis"],
+            self.results["verdict"],
+            feature_analysis,
+            model_interpretation,
+        )
+        self.results["deep_summary"] = deep_summary
         
         return {
             "html": self.generate_html_report(output_dir),
