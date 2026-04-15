@@ -4,8 +4,18 @@ from typing import Dict, List
 
 
 def recommend(domain: str, diagnosis: Dict, evidence: Dict | None = None) -> List[Dict]:
+    _ = (domain, diagnosis)  # Domain/diagnosis kept for compatibility with current pipeline API.
     if not evidence:
-        return []
+        return [
+            {
+                "priority": "LOW",
+                "action": "Collect required evidence signals",
+                "reason": "Evidence was unavailable, so targeted recommendations could not be generated reliably.",
+                "impact": "MEDIUM",
+                "effort": "LOW",
+                "evidence": {},
+            }
+        ]
 
     recommendations: List[Dict] = []
 

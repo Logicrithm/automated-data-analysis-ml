@@ -2,6 +2,7 @@ from __future__ import annotations
 
 
 def generate_deep_summary(evidence: dict, diagnosis: dict | None = None) -> dict:
+    _ = diagnosis  # Kept for backward-compatible call sites.
     if not evidence:
         return {
             "executive_insight": "Analysis complete.",

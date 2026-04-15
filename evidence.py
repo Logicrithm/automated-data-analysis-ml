@@ -2,6 +2,7 @@ from __future__ import annotations
 
 
 def build_evidence(signals: dict, feature_analysis: dict, ml_results: dict, diagnosis: dict) -> dict:
+    _ = diagnosis  # Reserved for future evidence enrichments from RCA output.
     weak_features = feature_analysis.get("weak_features", 0)
     total_features = signals.get("n_features", 1)
     weak_feature_pct = int((weak_features / max(total_features, 1)) * 100)
