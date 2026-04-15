@@ -46,13 +46,11 @@ def train_multiple_models(X: pd.DataFrame, y: pd.Series) -> Dict:
         return {"models": [], "best_model": None}
 
     if clean_X.isna().values.any():
+        # Caller already passes numeric features, so median imputation is appropriate here.
         clean_X = clean_X.fillna(clean_X.median(numeric_only=True)).fillna(0.0)
 
-    X = clean_X
-    y = clean_y
-
     x_train, x_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=RANDOM_STATE
+        clean_X, clean_y, test_size=0.2, random_state=RANDOM_STATE
     )
     model_specs = [
         ("Linear Regression", LinearRegression(), "HIGH"),
