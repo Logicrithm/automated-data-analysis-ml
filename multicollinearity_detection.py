@@ -9,7 +9,7 @@ def detect_multicollinearity(X):
     for i in range(X.shape[1]):
         try:
             vif_scores.append(float(variance_inflation_factor(X.values, i)))
-        except (ValueError, ZeroDivisionError):
+        except Exception:
             vif_scores.append(float("inf"))
     vif_data['VIF'] = vif_scores
     return vif_data

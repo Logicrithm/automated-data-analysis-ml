@@ -9,8 +9,11 @@ import pandas as pd
 
 from analysis import choose_target_column, run_regression_analysis
 from confidence_calculator import calculate_weighted_confidence
+from consistency_validator import validate_consistency as validate_output_consistency
 from context import infer_domain
+from causal_layer import build_causal_explanation
 from data_quality_scorer import calculate_data_quality_score
+from decision_engine import decide_root_cause
 from deep_summary import generate_deep_summary
 from evidence import build_evidence
 from feature_analysis import analyze_features
@@ -19,9 +22,7 @@ from insights_generator import generate_ranked_insights
 from model_comparison import train_multiple_models
 from model_interpreter import interpret_models
 from multicollinearity_detection import detect_multicollinearity
-from rca import diagnose
-from recommendations import recommend
-from conflict_resolver import resolve_conflicts
+from recommendation_engine import generate_recommendations_v2
 from signals import extract_signals
 from visualization import generate_visualizations
 
@@ -43,6 +44,8 @@ class DataAnalyzer:
             "model_interpretation": {},
             "deep_summary": {},
             "evidence": {},
+            "causal_layer": {},
+            "validation_report": {},
             "confidence": {},
             "quality_issues": [],
             "ml_results": {},
@@ -308,22 +311,10 @@ class DataAnalyzer:
         # Step 8: Model comparison
         self.generate_model_comparison()
         
-        # Step 9: RCA diagnosis (NEW)
-        self.results["diagnosis"] = diagnose(self.results["signals"], ml_results)
-        
-        # Step 10: Resolve conflicts (NEW - CRITICAL)
-        self.results["verdict"] = resolve_conflicts(
-            self.results["signals"],
-            self.results["context"].get("domain", "generic"),
-            self.results["diagnosis"],
-            []
-        )
-        
-        # Step 11: Generate recommendations (UPGRADED)
-        self.results["recommendations"] = recommend(
-            self.results["context"].get("domain", "generic"),
-            self.results["diagnosis"]
-        )
+        # Step 9: Placeholder values until decision-driven evidence pass completes
+        self.results["diagnosis"] = {}
+        self.results["verdict"] = {}
+        self.results["recommendations"] = []
         
         # Step 12: Multicollinearity detection
         multicollinearity = self.detect_multicollinearity()
@@ -341,8 +332,7 @@ class DataAnalyzer:
         feature_analysis = analyze_features(self.data, target_col)
         self.results["feature_analysis"] = feature_analysis
 
-        # Phase 4: Build evidence layer and regenerate downstream outputs.
-        # Diagnosis/recommendations now depend on quantified evidence, so they are recalculated here.
+        # Phase 4: Build evidence and run the decision architecture once.
         evidence = build_evidence(
             self.results["signals"],
             feature_analysis,
@@ -351,27 +341,33 @@ class DataAnalyzer:
         )
         self.results["evidence"] = evidence
 
-        self.results["diagnosis"] = diagnose(self.results["signals"], ml_results, evidence)
-        self.results["recommendations"] = recommend(
-            self.results["context"].get("domain", "generic"),
-            self.results["diagnosis"],
+        decision = decide_root_cause(evidence)
+        self.results["diagnosis"] = decision
+
+        causal_layer = build_causal_explanation(evidence, decision, ml_results)
+        self.results["causal_layer"] = causal_layer
+
+        recommendations = generate_recommendations_v2(
+            decision,
             evidence,
+            causal_layer,
+            self.results.get("context"),
         )
-        self.results["verdict"] = resolve_conflicts(
-            self.results["signals"],
-            self.results["context"].get("domain", "generic"),
-            self.results["diagnosis"],
-            self.results["recommendations"],
-        )
+        self.results["recommendations"] = recommendations
 
         model_interpretation = interpret_models(ml_results, self.results["diagnosis"])
         self.results["model_interpretation"] = model_interpretation
 
         deep_summary = generate_deep_summary(
             evidence,
-            self.results["diagnosis"],
+            decision,
+            causal_layer,
         )
-        self.results["deep_summary"] = deep_summary
+        validated = validate_output_consistency(decision, recommendations, deep_summary, self.results.get("verdict"))
+        self.results["recommendations"] = validated.get("recommendations", recommendations)
+        self.results["deep_summary"] = validated.get("deep_summary", deep_summary)
+        self.results["verdict"] = validated.get("verdict", {})
+        self.results["validation_report"] = validated.get("validation_report", {})
         
         return {
             "html": self.generate_html_report(output_dir),
