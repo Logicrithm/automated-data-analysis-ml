@@ -1,4 +1,6 @@
 import pandas as pd
+from numpy.linalg import LinAlgError
+from statsmodels.tools.sm_exceptions import MissingDataError
 from statsmodels.stats.outliers_influence import variance_inflation_factor
 
 def detect_multicollinearity(X):
@@ -9,7 +11,7 @@ def detect_multicollinearity(X):
     for i in range(X.shape[1]):
         try:
             vif_scores.append(float(variance_inflation_factor(X.values, i)))
-        except Exception:
+        except (ValueError, ZeroDivisionError, LinAlgError, MissingDataError):
             vif_scores.append(float("inf"))
     vif_data['VIF'] = vif_scores
     return vif_data

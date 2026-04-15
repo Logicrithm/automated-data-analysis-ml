@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 
 def _action(priority: str, action: str, reason: str, evidence: Dict, impact: str = "HIGH", effort: str = "MEDIUM") -> Dict:
@@ -15,15 +15,15 @@ def _action(priority: str, action: str, reason: str, evidence: Dict, impact: str
 
 
 def generate_recommendations_v2(
-    decision: Dict | None,
-    evidence: Dict | None,
-    causal_layer: Dict | None,
-    context: Dict | None = None,
+    decision: Optional[Dict],
+    evidence: Optional[Dict],
+    causal_layer: Optional[Dict],
+    context: Optional[Dict] = None,
 ) -> List[Dict]:
     decision = decision or {}
     evidence = evidence or {}
     causal_layer = causal_layer or {}
-    _ = context or {}
+    context = context or {}
 
     decision_name = str(decision.get("decision", "UNKNOWN"))
     severity = str(decision.get("severity", "MEDIUM"))
@@ -145,7 +145,6 @@ def generate_rule_chained_recommendations(
     residuals_have_pattern: bool = False,
 ) -> Dict:
     """Backward-compatible wrapper for legacy call sites."""
-    _ = (r2, multicollinearity, feature_count, vif_data, residuals_have_pattern)
     recommendations = generate_recommendations_v2(
         {"decision": "WEAK_FEATURES", "severity": "MEDIUM", "dominant_signal": "legacy_fallback", "secondary_signals": []},
         {},

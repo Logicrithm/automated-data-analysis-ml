@@ -2,6 +2,18 @@ from __future__ import annotations
 
 from typing import Dict, List, Tuple
 
+BASE_DATA_ISSUE_CONFIDENCE = 0.78
+DATA_ISSUE_CRITICAL_CONFIDENCE_BOOST = 0.15
+BASE_MULTICOLLINEARITY_CONFIDENCE = 0.74
+MULTICOLLINEARITY_PAIR_CAP = 8
+MULTICOLLINEARITY_PAIR_WEIGHT = 0.02
+BASE_NON_LINEARITY_CONFIDENCE = 0.69
+MAX_CORRELATION_CONFIDENCE_CAP = 0.5
+NON_LINEARITY_CORRELATION_WEIGHT = 0.3
+BASE_WEAK_FEATURE_CONFIDENCE = 0.65
+WEAK_FEATURE_PERCENT_CAP = 90
+WEAK_FEATURE_PERCENT_WEIGHT_DENOMINATOR = 300
+
 
 def _clip_confidence(value: float) -> float:
     return round(max(0.0, min(1.0, value)), 2)
@@ -109,7 +121,7 @@ def decide_root_cause(evidence: Dict | None) -> Dict:
         return _make_response(
             "DATA_ISSUE",
             severity,
-            0.78 + (0.15 if data_quality_score < 60 else 0.0),
+            BASE_DATA_ISSUE_CONFIDENCE + (DATA_ISSUE_CRITICAL_CONFIDENCE_BOOST if data_quality_score < 60 else 0.0),
             f"Data quality score {data_quality_score:.1f}/100; missing {missing_percentage:.1f}%",
             [
                 "Poor data quality blocks reliable modeling",
@@ -123,7 +135,7 @@ def decide_root_cause(evidence: Dict | None) -> Dict:
         return _make_response(
             "MULTICOLLINEARITY",
             severity,
-            0.74 + min(redundant_pairs_count, 8) * 0.02,
+            BASE_MULTICOLLINEARITY_CONFIDENCE + min(redundant_pairs_count, MULTICOLLINEARITY_PAIR_CAP) * MULTICOLLINEARITY_PAIR_WEIGHT,
             f"{redundant_pairs_count} feature pairs above redundancy threshold (max {max_redundancy:.2f})",
             [
                 f"Weak feature percentage {weak_feature_pct}%",
@@ -136,7 +148,7 @@ def decide_root_cause(evidence: Dict | None) -> Dict:
         return _make_response(
             "NON_LINEARITY",
             "HIGH" if r2_score < 0.2 else "MEDIUM",
-            0.69 + min(strongest_correlation, 0.5) * 0.3,
+            BASE_NON_LINEARITY_CONFIDENCE + min(strongest_correlation, MAX_CORRELATION_CONFIDENCE_CAP) * NON_LINEARITY_CORRELATION_WEIGHT,
             f"Strongest feature correlation {strongest_correlation:.2f} but R² only {r2_score:.3f}",
             [
                 "Linear model underfits available signal",
@@ -163,7 +175,7 @@ def decide_root_cause(evidence: Dict | None) -> Dict:
         return _make_response(
             "WEAK_FEATURES",
             severity,
-            0.65 + min(weak_feature_pct, 90) / 300,
+            BASE_WEAK_FEATURE_CONFIDENCE + min(weak_feature_pct, WEAK_FEATURE_PERCENT_CAP) / WEAK_FEATURE_PERCENT_WEIGHT_DENOMINATOR,
             f"{weak_feature_pct}% weak features; strongest correlation {strongest_correlation:.2f}",
             [
                 f"Model fit R²={r2_score:.3f}",

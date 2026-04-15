@@ -1,15 +1,25 @@
 from __future__ import annotations
 
+import re
 from typing import Dict, List
 
 
 _ALLOWED_ACTION_KEYWORDS = {
     "DATA_ISSUE": ["data", "missing", "quality", "clean"],
-    "MULTICOLLINEARITY": ["multicol", "pca", "feature", "redundant", "vif"],
-    "NON_LINEARITY": ["non-linear", "tree", "boost", "interaction", "model"],
+    "MULTICOLLINEARITY": ["multicollinearity", "pca", "redundant", "vif", "correlated"],
+    "NON_LINEARITY": ["non-linear", "tree", "boost", "interaction", "random forest", "gradient boosting"],
     "WEAK_FEATURES": ["feature", "engineering", "domain", "signal"],
     "FEATURE_GAP": ["collect", "feature", "domain", "variables"],
 }
+
+
+def _has_keyword_match(text: str, keywords: List[str]) -> bool:
+    lowered = text.lower()
+    patterns = [re.compile(rf"(?<!\w){re.escape(keyword.lower())}(?!\w)") for keyword in keywords]
+    for pattern in patterns:
+        if pattern.search(lowered):
+            return True
+    return False
 
 
 def _build_verdict(decision: Dict) -> Dict:
@@ -57,7 +67,7 @@ def validate_consistency(
             corrections.append(f"Removed duplicate recommendation: {action}.")
             continue
 
-        if allowed_keywords and not any(keyword in action_key for keyword in allowed_keywords):
+        if allowed_keywords and not _has_keyword_match(action_key, allowed_keywords):
             corrections.append(f"Removed decision-mismatched recommendation: {action}.")
             continue
 

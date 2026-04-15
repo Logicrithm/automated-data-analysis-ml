@@ -311,11 +311,6 @@ class DataAnalyzer:
         # Step 8: Model comparison
         self.generate_model_comparison()
         
-        # Step 9: Placeholder values until decision-driven evidence pass completes
-        self.results["diagnosis"] = {}
-        self.results["verdict"] = {}
-        self.results["recommendations"] = []
-        
         # Step 12: Multicollinearity detection
         multicollinearity = self.detect_multicollinearity()
         
