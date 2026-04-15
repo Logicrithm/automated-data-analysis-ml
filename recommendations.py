@@ -1,86 +1,96 @@
 from __future__ import annotations
 
-from typing import Dict, List, Tuple
-
-# Rule tuple format: (priority, action, impact, effort)
-
-RULES: Dict[str, Dict[str, List[Tuple[str, str, str, str]]]] = {
-    "real_estate": {
-        "feature_gap": [
-            ("CRITICAL", "Add location/neighborhood features", "HIGH", "HIGH"),
-            ("HIGH", "Add property condition and age", "HIGH", "MEDIUM"),
-        ],
-        "multicollinearity": [
-            ("CRITICAL", "Remove redundant square-footage features", "MEDIUM", "LOW"),
-        ],
-        "model_mismatch": [
-            ("HIGH", "Benchmark tree-based regressors", "HIGH", "LOW"),
-        ],
-        "data_quality": [
-            ("CRITICAL", "Fix missing and inconsistent property records", "HIGH", "MEDIUM"),
-        ],
-        "unknown": [("MEDIUM", "Continue feature engineering iteration", "MEDIUM", "MEDIUM")],
-    },
-    "healthcare": {
-        "feature_gap": [
-            ("CRITICAL", "Add clinical history and treatment variables", "HIGH", "HIGH"),
-            ("HIGH", "Add vitals and biomarker trends", "HIGH", "MEDIUM"),
-        ],
-        "multicollinearity": [("HIGH", "Consolidate highly correlated lab measures", "MEDIUM", "MEDIUM")],
-        "model_mismatch": [("HIGH", "Evaluate non-linear and calibrated models", "HIGH", "MEDIUM")],
-        "data_quality": [("CRITICAL", "Resolve missing patient and diagnosis records", "HIGH", "HIGH")],
-        "unknown": [("MEDIUM", "Collect additional domain features", "MEDIUM", "MEDIUM")],
-    },
-    "business": {
-        "feature_gap": [
-            ("CRITICAL", "Add customer segment and campaign variables", "HIGH", "MEDIUM"),
-            ("HIGH", "Add seasonality and promotion signals", "HIGH", "MEDIUM"),
-        ],
-        "multicollinearity": [("HIGH", "Drop duplicated revenue/cost aggregates", "MEDIUM", "LOW")],
-        "model_mismatch": [("HIGH", "Try gradient boosting with interactions", "HIGH", "LOW")],
-        "data_quality": [("CRITICAL", "Clean transaction gaps and duplicates", "HIGH", "MEDIUM")],
-        "unknown": [("MEDIUM", "Continue targeted feature engineering", "MEDIUM", "MEDIUM")],
-    },
-    "generic": {
-        "feature_gap": [
-            ("CRITICAL", "Add domain-specific predictors", "HIGH", "HIGH"),
-            ("HIGH", "Create interaction features", "MEDIUM", "LOW"),
-        ],
-        "multicollinearity": [("HIGH", "Remove highly correlated columns", "MEDIUM", "LOW")],
-        "model_mismatch": [("HIGH", "Benchmark non-linear models", "MEDIUM", "LOW")],
-        "data_quality": [("CRITICAL", "Improve missingness and consistency", "HIGH", "MEDIUM")],
-        "unknown": [("MEDIUM", "Perform exploratory feature analysis", "MEDIUM", "MEDIUM")],
-    },
-}
+from typing import Dict, List
 
 
-def recommend(domain: str, diagnosis: Dict, verdict: Dict | None = None) -> Dict:
-    selected_domain = domain if domain in RULES else "generic"
-    primary_issue = (verdict or {}).get("primary_issue")
-    if not primary_issue:
-        if diagnosis.get("data_quality") in {"poor", "fair"}:
-            primary_issue = "data_quality"
-        elif diagnosis.get("feature_strength") == "weak":
-            primary_issue = "feature_gap"
-        elif diagnosis.get("multicollinearity") in {"high", "critical"}:
-            primary_issue = "multicollinearity"
-        elif diagnosis.get("model_perf") == "critical":
-            primary_issue = "model_mismatch"
-        else:
-            primary_issue = "unknown"
+def recommend(
+    domain: str = "", diagnosis: Dict | None = None, evidence: Dict | None = None
+) -> List[Dict]:
+    _ = (domain, diagnosis)  # Domain/diagnosis kept for compatibility with current pipeline API.
+    if not evidence:
+        return [
+            {
+                "priority": "LOW",
+                "action": "Collect required evidence signals",
+                "reason": "Evidence was unavailable, so targeted recommendations could not be generated reliably.",
+                "impact": "MEDIUM",
+                "effort": "LOW",
+                "evidence": {},
+            }
+        ]
 
-    items = (
-        RULES[selected_domain].get(primary_issue)
-        or RULES[selected_domain].get("unknown")
-        or RULES["generic"]["unknown"]
-    )
-    recommendations = [
-        {
-            "priority": priority,
-            "action": action,
-            "impact": impact,
-            "effort": effort,
-        }
-        for priority, action, impact, effort in items
-    ]
-    return {"primary_issue": primary_issue, "recommendations": recommendations}
+    weak_feature_pct = int(evidence.get("weak_feature_pct", 0))
+    strongest_correlation = float(evidence.get("strongest_correlation", 0.0))
+    weak_features = int(evidence.get("weak_features", 0))
+    redundant_pairs_count = int(evidence.get("redundant_pairs_count", 0))
+    max_redundancy_correlation = float(evidence.get("max_redundancy_correlation", 0.0))
+    r2_score = float(evidence.get("r2_score", 0.0))
+    r2_percentage = float(evidence.get("r2_percentage", 0.0))
+    data_quality_score = float(evidence.get("data_quality_score", 0.0))
+    missing_percentage = float(evidence.get("missing_percentage", 0.0))
+
+    recommendations: List[Dict] = []
+
+    if weak_feature_pct > 50:
+        recommendations.append(
+            {
+                "priority": "CRITICAL",
+                "action": "Add domain-specific features",
+                "reason": f"{weak_feature_pct}% of features are weak (correlation < 0.15). Strongest predictor is only {strongest_correlation:.2f}. Insufficient signal in current feature set.",
+                "impact": "HIGH",
+                "effort": "HIGH",
+                "evidence": {
+                    "weak_features": weak_features,
+                    "strongest_correlation": strongest_correlation,
+                },
+            }
+        )
+
+    if redundant_pairs_count > 2:
+        recommendations.append(
+            {
+                "priority": "HIGH",
+                "action": "Remove multicollinear features",
+                "reason": f"{redundant_pairs_count} pairs of features show high correlation (max: {max_redundancy_correlation:.2f}). Redundant features distort model coefficients.",
+                "impact": "HIGH",
+                "effort": "LOW",
+                "evidence": {
+                    "redundant_pairs": redundant_pairs_count,
+                    "max_correlation": max_redundancy_correlation,
+                },
+            }
+        )
+
+    if r2_score < 0.3 and weak_feature_pct <= 50:
+        recommendations.append(
+            {
+                "priority": "HIGH",
+                "action": "Try non-linear models (Random Forest, Gradient Boosting)",
+                "reason": f"Model R² = {r2_percentage:.1f}% is poor despite reasonable features. Linear relationships may not capture data patterns.",
+                "impact": "MEDIUM",
+                "effort": "MEDIUM",
+                "evidence": {
+                    "r2_score": r2_score,
+                    "r2_percentage": r2_percentage,
+                },
+            }
+        )
+
+    if data_quality_score < 70:
+        recommendations.append(
+            {
+                "priority": "CRITICAL",
+                "action": "Improve data quality - handle missing values",
+                "reason": f"Data quality score is only {data_quality_score}/100 with {missing_percentage:.1f}% missing values. Poor data quality undermines all analysis.",
+                "impact": "HIGH",
+                "effort": "HIGH",
+                "evidence": {
+                    "quality_score": data_quality_score,
+                    "missing_percentage": missing_percentage,
+                },
+            }
+        )
+
+    priority_order = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3}
+    recommendations.sort(key=lambda x: priority_order.get(x["priority"], 99))
+    return recommendations

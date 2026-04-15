@@ -12,6 +12,7 @@ from confidence_calculator import calculate_weighted_confidence
 from context import infer_domain
 from data_quality_scorer import calculate_data_quality_score
 from deep_summary import generate_deep_summary
+from evidence import build_evidence
 from feature_analysis import analyze_features
 from html_report import build_html_report
 from insights_generator import generate_ranked_insights
@@ -19,7 +20,7 @@ from model_comparison import train_multiple_models
 from model_interpreter import interpret_models
 from multicollinearity_detection import detect_multicollinearity
 from rca import diagnose
-from recommendations_new import recommend
+from recommendations import recommend
 from conflict_resolver import resolve_conflicts
 from signals import extract_signals
 from visualization import generate_visualizations
@@ -37,10 +38,11 @@ class DataAnalyzer:
             "context": {},
             "diagnosis": {},
             "verdict": {},
-            "recommendations": {},
+            "recommendations": [],
             "feature_analysis": {},
             "model_interpretation": {},
             "deep_summary": {},
+            "evidence": {},
             "confidence": {},
             "quality_issues": [],
             "ml_results": {},
@@ -339,15 +341,35 @@ class DataAnalyzer:
         feature_analysis = analyze_features(self.data, target_col)
         self.results["feature_analysis"] = feature_analysis
 
+        # Phase 4: Build evidence layer and regenerate downstream outputs.
+        # Diagnosis/recommendations now depend on quantified evidence, so they are recalculated here.
+        evidence = build_evidence(
+            self.results["signals"],
+            feature_analysis,
+            ml_results,
+            self.results["diagnosis"],
+        )
+        self.results["evidence"] = evidence
+
+        self.results["diagnosis"] = diagnose(self.results["signals"], ml_results, evidence)
+        self.results["recommendations"] = recommend(
+            self.results["context"].get("domain", "generic"),
+            self.results["diagnosis"],
+            evidence,
+        )
+        self.results["verdict"] = resolve_conflicts(
+            self.results["signals"],
+            self.results["context"].get("domain", "generic"),
+            self.results["diagnosis"],
+            self.results["recommendations"],
+        )
+
         model_interpretation = interpret_models(ml_results, self.results["diagnosis"])
         self.results["model_interpretation"] = model_interpretation
 
         deep_summary = generate_deep_summary(
-            self.results["signals"],
+            evidence,
             self.results["diagnosis"],
-            self.results["verdict"],
-            feature_analysis,
-            model_interpretation,
         )
         self.results["deep_summary"] = deep_summary
         
