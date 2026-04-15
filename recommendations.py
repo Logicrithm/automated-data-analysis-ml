@@ -17,64 +17,74 @@ def recommend(domain: str, diagnosis: Dict, evidence: Dict | None = None) -> Lis
             }
         ]
 
+    weak_feature_pct = int(evidence.get("weak_feature_pct", 0))
+    strongest_correlation = float(evidence.get("strongest_correlation", 0.0))
+    weak_features = int(evidence.get("weak_features", 0))
+    redundant_pairs_count = int(evidence.get("redundant_pairs_count", 0))
+    max_redundancy_correlation = float(evidence.get("max_redundancy_correlation", 0.0))
+    r2_score = float(evidence.get("r2_score", 0.0))
+    r2_percentage = float(evidence.get("r2_percentage", 0.0))
+    data_quality_score = float(evidence.get("data_quality_score", 0.0))
+    missing_percentage = float(evidence.get("missing_percentage", 0.0))
+
     recommendations: List[Dict] = []
 
-    if evidence["weak_feature_pct"] > 50:
+    if weak_feature_pct > 50:
         recommendations.append(
             {
                 "priority": "CRITICAL",
                 "action": "Add domain-specific features",
-                "reason": f"{evidence['weak_feature_pct']}% of features are weak (correlation < 0.15). Strongest predictor is only {evidence['strongest_correlation']:.2f}. Insufficient signal in current feature set.",
+                "reason": f"{weak_feature_pct}% of features are weak (correlation < 0.15). Strongest predictor is only {strongest_correlation:.2f}. Insufficient signal in current feature set.",
                 "impact": "HIGH",
                 "effort": "HIGH",
                 "evidence": {
-                    "weak_features": evidence["weak_features"],
-                    "strongest_correlation": evidence["strongest_correlation"],
+                    "weak_features": weak_features,
+                    "strongest_correlation": strongest_correlation,
                 },
             }
         )
 
-    if evidence["redundant_pairs_count"] > 2:
+    if redundant_pairs_count > 2:
         recommendations.append(
             {
                 "priority": "HIGH",
                 "action": "Remove multicollinear features",
-                "reason": f"{evidence['redundant_pairs_count']} pairs of features show high correlation (max: {evidence['max_redundancy_correlation']:.2f}). Redundant features distort model coefficients.",
+                "reason": f"{redundant_pairs_count} pairs of features show high correlation (max: {max_redundancy_correlation:.2f}). Redundant features distort model coefficients.",
                 "impact": "HIGH",
                 "effort": "LOW",
                 "evidence": {
-                    "redundant_pairs": evidence["redundant_pairs_count"],
-                    "max_correlation": evidence["max_redundancy_correlation"],
+                    "redundant_pairs": redundant_pairs_count,
+                    "max_correlation": max_redundancy_correlation,
                 },
             }
         )
 
-    if evidence["r2_score"] < 0.3 and evidence["weak_feature_pct"] <= 50:
+    if r2_score < 0.3 and weak_feature_pct <= 50:
         recommendations.append(
             {
                 "priority": "HIGH",
                 "action": "Try non-linear models (Random Forest, Gradient Boosting)",
-                "reason": f"Model R² = {evidence['r2_percentage']:.1f}% is poor despite reasonable features. Linear relationships may not capture data patterns.",
+                "reason": f"Model R² = {r2_percentage:.1f}% is poor despite reasonable features. Linear relationships may not capture data patterns.",
                 "impact": "MEDIUM",
                 "effort": "MEDIUM",
                 "evidence": {
-                    "r2_score": evidence["r2_score"],
-                    "r2_percentage": evidence["r2_percentage"],
+                    "r2_score": r2_score,
+                    "r2_percentage": r2_percentage,
                 },
             }
         )
 
-    if evidence["data_quality_score"] < 70:
+    if data_quality_score < 70:
         recommendations.append(
             {
                 "priority": "CRITICAL",
                 "action": "Improve data quality - handle missing values",
-                "reason": f"Data quality score is only {evidence['data_quality_score']}/100 with {evidence['missing_percentage']:.1f}% missing values. Poor data quality undermines all analysis.",
+                "reason": f"Data quality score is only {data_quality_score}/100 with {missing_percentage:.1f}% missing values. Poor data quality undermines all analysis.",
                 "impact": "HIGH",
                 "effort": "HIGH",
                 "evidence": {
-                    "quality_score": evidence["data_quality_score"],
-                    "missing_percentage": evidence["missing_percentage"],
+                    "quality_score": data_quality_score,
+                    "missing_percentage": missing_percentage,
                 },
             }
         )

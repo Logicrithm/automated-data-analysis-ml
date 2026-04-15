@@ -5,6 +5,7 @@ def build_evidence(signals: dict, feature_analysis: dict, ml_results: dict, diag
     _ = diagnosis  # Reserved for future evidence enrichments from RCA output.
     weak_features = feature_analysis.get("weak_features", 0)
     total_features = signals.get("n_features", 1)
+    # Guard denominator to avoid division by zero when feature count is missing/zero.
     weak_feature_pct = int((weak_features / max(total_features, 1)) * 100)
 
     correlations = signals.get("correlations", [])

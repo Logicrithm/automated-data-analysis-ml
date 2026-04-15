@@ -13,38 +13,43 @@ def diagnose(signals: Dict, ml_results: Dict, evidence: Dict | None = None) -> D
             "data_quality": "unknown",
         }
 
-    if evidence["r2_score"] < 0.1:
+    r2_score = float(evidence.get("r2_score", 0.0))
+    weak_feature_pct = int(evidence.get("weak_feature_pct", 0))
+    redundant_pairs_count = int(evidence.get("redundant_pairs_count", 0))
+    data_quality_score = float(evidence.get("data_quality_score", 0.0))
+
+    if r2_score < 0.1:
         model_perf = "critical"
-    elif evidence["r2_score"] < 0.3:
+    elif r2_score < 0.3:
         model_perf = "weak"
-    elif evidence["r2_score"] < 0.5:
+    elif r2_score < 0.5:
         model_perf = "moderate"
     else:
         model_perf = "good"
 
-    if evidence["weak_feature_pct"] > 70:
+    if weak_feature_pct > 70:
         feature_strength = "critical"
-    elif evidence["weak_feature_pct"] > 50:
+    elif weak_feature_pct > 50:
         feature_strength = "weak"
-    elif evidence["weak_feature_pct"] > 30:
+    elif weak_feature_pct > 30:
         feature_strength = "moderate"
     else:
         feature_strength = "strong"
 
-    if evidence["redundant_pairs_count"] > 5:
+    if redundant_pairs_count > 5:
         multicollinearity = "critical"
-    elif evidence["redundant_pairs_count"] > 2:
+    elif redundant_pairs_count > 2:
         multicollinearity = "high"
-    elif evidence["redundant_pairs_count"] > 0:
+    elif redundant_pairs_count > 0:
         multicollinearity = "moderate"
     else:
         multicollinearity = "low"
 
-    if evidence["data_quality_score"] < 60:
+    if data_quality_score < 60:
         data_quality = "poor"
-    elif evidence["data_quality_score"] < 75:
+    elif data_quality_score < 75:
         data_quality = "fair"
-    elif evidence["data_quality_score"] < 85:
+    elif data_quality_score < 85:
         data_quality = "good"
     else:
         data_quality = "excellent"

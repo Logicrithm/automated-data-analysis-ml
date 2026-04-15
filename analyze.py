@@ -341,7 +341,8 @@ class DataAnalyzer:
         feature_analysis = analyze_features(self.data, target_col)
         self.results["feature_analysis"] = feature_analysis
 
-        # Phase 4: Build evidence layer and regenerate downstream outputs
+        # Phase 4: Build evidence layer and regenerate downstream outputs.
+        # Diagnosis/recommendations now depend on quantified evidence, so they are recalculated here.
         evidence = build_evidence(
             self.results["signals"],
             feature_analysis,
