@@ -36,16 +36,20 @@ def train_multiple_models(X: pd.DataFrame, y: pd.Series) -> Dict:
     if X.empty or len(X) < MIN_TRAIN_TEST_SAMPLES:
         return {"models": [], "best_model": None}
 
-    # Guard against runtime failures on messy datasets by removing invalid rows.
-    training_df = X.copy()
-    target_column = "_target"
-    training_df[target_column] = y
-    training_df = training_df.replace([np.inf, -np.inf], np.nan).dropna(axis=0, how="any")
-    if training_df.empty or len(training_df) < MIN_TRAIN_TEST_SAMPLES:
+    # Guard against runtime failures on messy datasets by sanitizing invalid rows/values.
+    clean_X = X.replace([np.inf, -np.inf], np.nan).copy()
+    clean_y = y.replace([np.inf, -np.inf], np.nan)
+    valid_target_mask = clean_y.notna()
+    clean_X = clean_X.loc[valid_target_mask]
+    clean_y = clean_y.loc[valid_target_mask]
+    if clean_X.empty or len(clean_X) < MIN_TRAIN_TEST_SAMPLES:
         return {"models": [], "best_model": None}
 
-    y = training_df[target_column]
-    X = training_df.drop(columns=[target_column])
+    if clean_X.isna().values.any():
+        clean_X = clean_X.fillna(clean_X.median(numeric_only=True)).fillna(0.0)
+
+    X = clean_X
+    y = clean_y
 
     x_train, x_test, y_train, y_test = train_test_split(
         X, y, test_size=0.2, random_state=RANDOM_STATE
