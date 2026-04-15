@@ -38,13 +38,14 @@ def train_multiple_models(X: pd.DataFrame, y: pd.Series) -> Dict:
 
     # Guard against runtime failures on messy datasets by removing invalid rows.
     training_df = X.copy()
-    training_df["__target__"] = y
+    target_column = "_target"
+    training_df[target_column] = y
     training_df = training_df.replace([np.inf, -np.inf], np.nan).dropna(axis=0, how="any")
     if training_df.empty or len(training_df) < MIN_TRAIN_TEST_SAMPLES:
         return {"models": [], "best_model": None}
 
-    y = training_df["__target__"]
-    X = training_df.drop(columns=["__target__"])
+    y = training_df[target_column]
+    X = training_df.drop(columns=[target_column])
 
     x_train, x_test, y_train, y_test = train_test_split(
         X, y, test_size=0.2, random_state=RANDOM_STATE
