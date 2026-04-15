@@ -45,7 +45,13 @@ def _deduplicate(items: List[Dict]) -> List[Dict]:
 def generate_ranked_insights(results: Dict, quality_summary: Dict, confidence_scores: Dict[str, float]) -> List[Dict]:
     ml_results = results.get("ml_results") or {}
     multicollinearity = results.get("multicollinearity") or {}
-    recommendations = (results.get("recommendations") or {}).get("recommendations") or []
+    recommendations_obj = results.get("recommendations") or []
+    if isinstance(recommendations_obj, dict):
+        recommendations = recommendations_obj.get("recommendations") or []
+    elif isinstance(recommendations_obj, list):
+        recommendations = recommendations_obj
+    else:
+        recommendations = []
     rca = results.get("root_cause_analysis") or {}
     context = results.get("context") or {}
     data_quality = (results.get("data_quality") or {}).get("data_quality") or {}

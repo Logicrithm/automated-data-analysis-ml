@@ -3,44 +3,47 @@ from __future__ import annotations
 from typing import Dict
 
 
-def diagnose(signals: Dict, ml_results: Dict) -> Dict:
-    r2 = float(ml_results.get("r2_score", 0.0))
-    avg_corr = float(signals.get("avg_correlation", 0.0))
-    max_corr = float(signals.get("max_correlation", 0.0))
-    quality = float(signals.get("data_quality_score", 0.0))
+def diagnose(signals: Dict, ml_results: Dict, evidence: Dict | None = None) -> Dict:
+    if not evidence:
+        return {
+            "model_perf": "unknown",
+            "feature_strength": "unknown",
+            "multicollinearity": "unknown",
+            "data_quality": "unknown",
+        }
 
-    if r2 < 0.2:
+    if evidence["r2_score"] < 0.1:
         model_perf = "critical"
-    elif r2 < 0.4:
+    elif evidence["r2_score"] < 0.3:
         model_perf = "weak"
-    elif r2 < 0.7:
-        model_perf = "fair"
+    elif evidence["r2_score"] < 0.5:
+        model_perf = "moderate"
     else:
         model_perf = "good"
 
-    if avg_corr < 0.2:
+    if evidence["weak_feature_pct"] > 70:
+        feature_strength = "critical"
+    elif evidence["weak_feature_pct"] > 50:
         feature_strength = "weak"
-    elif avg_corr < 0.4:
+    elif evidence["weak_feature_pct"] > 30:
         feature_strength = "moderate"
     else:
         feature_strength = "strong"
 
-    if max_corr >= 0.95:
+    if evidence["redundant_pairs_count"] > 5:
         multicollinearity = "critical"
-    elif max_corr > 0.85:
+    elif evidence["redundant_pairs_count"] > 2:
         multicollinearity = "high"
-    elif max_corr > 0.7:
+    elif evidence["redundant_pairs_count"] > 0:
         multicollinearity = "moderate"
-    elif max_corr > 0.5:
-        multicollinearity = "low"
     else:
-        multicollinearity = "none"
+        multicollinearity = "low"
 
-    if quality < 60:
+    if evidence["data_quality_score"] < 60:
         data_quality = "poor"
-    elif quality < 75:
+    elif evidence["data_quality_score"] < 75:
         data_quality = "fair"
-    elif quality < 90:
+    elif evidence["data_quality_score"] < 85:
         data_quality = "good"
     else:
         data_quality = "excellent"
@@ -50,4 +53,5 @@ def diagnose(signals: Dict, ml_results: Dict) -> Dict:
         "feature_strength": feature_strength,
         "multicollinearity": multicollinearity,
         "data_quality": data_quality,
+        "evidence_used": True,
     }
