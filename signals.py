@@ -49,6 +49,7 @@ def extract_signals(df: pd.DataFrame, target_col: str | None) -> Dict:
 
     quality_result = calculate_data_quality_score(df)
     data_quality_score = float((quality_result.get("data_quality") or {}).get("overall_score", 0.0))
+    missing_percentage = float((df.isna().sum().sum() / max(df.size, 1)) * 100)
 
     return {
         "n_rows": int(n_rows),
@@ -58,4 +59,5 @@ def extract_signals(df: pd.DataFrame, target_col: str | None) -> Dict:
         "avg_correlation": round(avg_correlation, 3),
         "max_correlation": round(max_correlation, 3),
         "data_quality_score": round(data_quality_score, 1),
+        "missing_percentage": round(missing_percentage, 2),
     }

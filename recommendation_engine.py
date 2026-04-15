@@ -1,16 +1,140 @@
 from __future__ import annotations
 
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 
-def _action(priority: str, action: str, details: str, impact: str, effort: str) -> Dict:
+def _action(priority: str, action: str, reason: str, evidence: Dict, impact: str = "HIGH", effort: str = "MEDIUM") -> Dict:
     return {
         "priority": priority,
         "action": action,
-        "details": details,
+        "reason": reason,
         "impact": impact,
         "effort": effort,
+        "evidence": evidence,
     }
+
+
+def generate_recommendations_v2(
+    decision: Optional[Dict],
+    evidence: Optional[Dict],
+    causal_layer: Optional[Dict],
+    context: Optional[Dict] = None,
+) -> List[Dict]:
+    decision = decision or {}
+    evidence = evidence or {}
+    causal_layer = causal_layer or {}
+    context = context or {}
+
+    decision_name = str(decision.get("decision", "UNKNOWN"))
+    severity = str(decision.get("severity", "MEDIUM"))
+    root_cause = str(causal_layer.get("root_cause", "Primary issue identified from evidence."))
+    dominant_signal = str(decision.get("dominant_signal", "evidence trigger not available"))
+
+    common_evidence = {
+        "dominant_signal": dominant_signal,
+        "secondary_signals": decision.get("secondary_signals", []),
+        "r2_percentage": evidence.get("r2_percentage", 0.0),
+        "weak_feature_pct": evidence.get("weak_feature_pct", 0),
+    }
+
+    if decision_name == "DATA_ISSUE":
+        return [
+            _action(
+                severity,
+                "Fix missing values and schema consistency before retraining",
+                f"{root_cause} Trigger: {dominant_signal}",
+                {**common_evidence, "missing_percentage": evidence.get("missing_percentage", 0.0)},
+                impact="HIGH",
+                effort="HIGH",
+            ),
+            _action(
+                "HIGH",
+                "Run data validation checks (nulls, duplicates, outliers)",
+                "Data defects must be controlled before any model-level change.",
+                common_evidence,
+                impact="HIGH",
+                effort="MEDIUM",
+            ),
+        ]
+
+    if decision_name == "MULTICOLLINEARITY":
+        return [
+            _action(
+                severity,
+                "Remove or merge highly correlated feature pairs",
+                f"{root_cause} Trigger: {dominant_signal}",
+                {**common_evidence, "redundant_pairs_count": evidence.get("redundant_pairs_count", 0)},
+                impact="HIGH",
+                effort="LOW",
+            ),
+            _action(
+                "HIGH",
+                "Apply PCA or regularization to stabilize feature effects",
+                "Dimensionality reduction reduces redundant signal overlap.",
+                common_evidence,
+                impact="HIGH",
+                effort="MEDIUM",
+            ),
+        ]
+
+    if decision_name == "NON_LINEARITY":
+        return [
+            _action(
+                severity,
+                "Benchmark tree-based models (Random Forest / Gradient Boosting)",
+                f"{root_cause} Trigger: {dominant_signal}",
+                common_evidence,
+                impact="HIGH",
+                effort="MEDIUM",
+            ),
+            _action(
+                "MEDIUM",
+                "Add interaction and non-linear transformed features",
+                "Feature transforms can expose structure missed by linear assumptions.",
+                common_evidence,
+                impact="MEDIUM",
+                effort="MEDIUM",
+            ),
+        ]
+
+    if decision_name == "FEATURE_GAP":
+        return [
+            _action(
+                severity,
+                "Collect additional domain variables with direct target relevance",
+                f"{root_cause} Trigger: {dominant_signal}",
+                {**common_evidence, "total_features": evidence.get("total_features", 0)},
+                impact="HIGH",
+                effort="HIGH",
+            ),
+            _action(
+                "HIGH",
+                "Prioritize data acquisition plan with subject-matter experts",
+                "Missing explanatory variables limit modeling gains from algorithm tuning.",
+                common_evidence,
+                impact="HIGH",
+                effort="HIGH",
+            ),
+        ]
+
+    return [
+        _action(
+            severity,
+            "Perform targeted feature engineering on low-signal predictors",
+            f"{root_cause} Trigger: {dominant_signal}",
+            common_evidence,
+            impact="HIGH",
+            effort="MEDIUM",
+        ),
+        _action(
+            "MEDIUM",
+            "Re-assess domain feature coverage and interactions",
+            "Weak predictive signal indicates current features are not sufficiently informative.",
+            common_evidence,
+            impact="MEDIUM",
+            effort="MEDIUM",
+        ),
+    ]
 
 
 def generate_rule_chained_recommendations(
@@ -20,74 +144,11 @@ def generate_rule_chained_recommendations(
     vif_data: List[Dict],
     residuals_have_pattern: bool = False,
 ) -> Dict:
-    high_vif_pairs = multicollinearity.get("high_vif_pairs") or []
-    high_vif = [item for item in (vif_data or []) if float(item.get("vif", 0.0)) > 10]
-    max_vif = max([float(item.get("vif", 0.0)) for item in (vif_data or [])], default=0.0)
-    multicollinearity_high = bool(high_vif_pairs or high_vif)
-
-    recommendations: List[Dict] = []
-    if r2 < 0.3 and multicollinearity_high and max_vif > 10:
-        pair_text = ""
-        if high_vif_pairs:
-            top = high_vif_pairs[0]
-            pair_text = (
-                f"{top['feature_a']} and {top['feature_b']} correlation is {top['correlation']:+.2f}."
-            )
-        recommendations.extend(
-            [
-                _action(
-                    "CRITICAL",
-                    "Remove redundant features",
-                    pair_text or "High-VIF features are introducing redundant signal.",
-                    "HIGH",
-                    "LOW",
-                ),
-                _action(
-                    "HIGH",
-                    "Apply dimensionality reduction",
-                    "Use PCA or feature engineering to reduce multicollinearity.",
-                    "HIGH",
-                    "MEDIUM",
-                ),
-                _action(
-                    "MEDIUM",
-                    "Then retry with non-linear model",
-                    "Random Forest or Gradient Boosting can handle complex interactions better.",
-                    "MEDIUM",
-                    "MEDIUM",
-                ),
-            ]
-        )
-    elif r2 < 0.3 and feature_count < 5:
-        recommendations.extend(
-            [
-                _action("CRITICAL", "Collect additional features", "Current feature set is too small.", "HIGH", "MEDIUM"),
-                _action("HIGH", "Perform domain research", "Gather known predictive signals from the business domain.", "HIGH", "MEDIUM"),
-                _action("MEDIUM", "Add feature interactions", "Introduce interaction and polynomial terms.", "MEDIUM", "LOW"),
-            ]
-        )
-    elif r2 < 0.3 and feature_count > 10:
-        recommendations.extend(
-            [
-                _action("CRITICAL", "Try non-linear models", "Random Forest/Gradient Boosting likely fit better.", "HIGH", "LOW"),
-                _action("HIGH", "Apply feature selection", "Reduce noise and keep high-signal predictors.", "HIGH", "MEDIUM"),
-                _action("MEDIUM", "Use ensemble methods", "Blend models for robustness.", "MEDIUM", "MEDIUM"),
-            ]
-        )
-    elif r2 > 0.7 and residuals_have_pattern:
-        recommendations.extend(
-            [
-                _action("HIGH", "Add interaction features", "Residual pattern implies missing interaction effects.", "MEDIUM", "LOW"),
-                _action("MEDIUM", "Check non-linear patterns", "Inspect residual plots and non-linear transforms.", "MEDIUM", "LOW"),
-                _action("LOW", "Verify assumptions", "Confirm remaining assumptions for production deployment.", "LOW", "LOW"),
-            ]
-        )
-    else:
-        recommendations.extend(
-            [
-                _action("HIGH", "Continue feature engineering", "Add domain-specific predictors.", "MEDIUM", "MEDIUM"),
-                _action("MEDIUM", "Benchmark non-linear models", "Compare with tree-based methods.", "MEDIUM", "LOW"),
-            ]
-        )
-
+    """Backward-compatible wrapper for legacy call sites."""
+    recommendations = generate_recommendations_v2(
+        {"decision": "WEAK_FEATURES", "severity": "MEDIUM", "dominant_signal": "legacy_fallback", "secondary_signals": []},
+        {},
+        {"root_cause": "Legacy recommendation flow invoked."},
+        {},
+    )
     return {"recommendations": recommendations}
