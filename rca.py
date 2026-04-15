@@ -3,7 +3,9 @@ from __future__ import annotations
 from typing import Dict
 
 
-def diagnose(signals: Dict, ml_results: Dict, evidence: Dict | None = None) -> Dict:
+def diagnose(
+    signals: Dict | None = None, ml_results: Dict | None = None, evidence: Dict | None = None
+) -> Dict:
     _ = (signals, ml_results)  # Retained for compatibility and potential fallback diagnostics.
     if not evidence:
         return {

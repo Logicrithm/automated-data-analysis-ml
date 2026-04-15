@@ -3,7 +3,9 @@ from __future__ import annotations
 from typing import Dict, List
 
 
-def recommend(domain: str, diagnosis: Dict, evidence: Dict | None = None) -> List[Dict]:
+def recommend(
+    domain: str = "", diagnosis: Dict | None = None, evidence: Dict | None = None
+) -> List[Dict]:
     _ = (domain, diagnosis)  # Domain/diagnosis kept for compatibility with current pipeline API.
     if not evidence:
         return [
