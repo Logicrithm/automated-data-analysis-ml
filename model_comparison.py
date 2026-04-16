@@ -80,7 +80,7 @@ def train_multiple_models(X: pd.DataFrame, y: pd.Series) -> Dict:
         )
     else:
         model_specs.append(
-            ("Gradient Boosting (fallback)", GradientBoostingRegressor(random_state=RANDOM_STATE), "MEDIUM")
+            ("Gradient Boosting", GradientBoostingRegressor(random_state=RANDOM_STATE), "MEDIUM")
         )
 
     raw_records: List[Dict] = []
