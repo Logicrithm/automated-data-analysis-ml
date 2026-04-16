@@ -42,13 +42,22 @@ def _deduplicate(items: List[Dict]) -> List[Dict]:
     return deduped
 
 
-def generate_ranked_insights(results: Dict, quality_summary: Dict, confidence_scores: Dict[str, float]) -> List[Dict]:
+def generate_ranked_insights(results: Dict, quality_summary: Dict, multicollinearity: Dict) -> List[Dict]:
     ml_results = results.get("ml_results") or {}
-    multicollinearity = results.get("multicollinearity") or {}
-    recommendations = (results.get("recommendations") or {}).get("recommendations") or []
+    
+    # 🔧 FIX: Handle both list and dict formats for recommendations
+    recommendations_obj = results.get("recommendations") or []
+    if isinstance(recommendations_obj, dict):
+        recommendations = recommendations_obj.get("recommendations") or []
+    elif isinstance(recommendations_obj, list):
+        recommendations = recommendations_obj
+    else:
+        recommendations = []
+    
     rca = results.get("root_cause_analysis") or {}
     context = results.get("context") or {}
     data_quality = (results.get("data_quality") or {}).get("data_quality") or {}
+    confidence_scores = results.get("confidence") or {}
 
     r2_value = float(ml_results.get("r2_score", 0.0))
     target_column = ml_results.get("target_column", "target")
@@ -57,7 +66,7 @@ def generate_ranked_insights(results: Dict, quality_summary: Dict, confidence_sc
     unexplained_pct = 100.0 - explained_pct
 
     insights: List[Dict] = []
-    model_actions = recommendations[:3]
+    model_actions = [item for item in recommendations if isinstance(item, dict)][:3]
     performance_prefix = (
         f"Model performs worse than baseline (R²={r2_value:.3f}). "
         if r2_value < 0
@@ -94,7 +103,7 @@ def generate_ranked_insights(results: Dict, quality_summary: Dict, confidence_sc
                 ),
                 root_cause="Redundant features are measuring similar signal.",
                 confidence={**confidence_scores, "finding": 0.99},
-                actions=[item for item in recommendations if item.get("priority") in {"CRITICAL", "HIGH"}][:3],
+                actions=[item for item in recommendations if isinstance(item, dict) and item.get("priority") in {"CRITICAL", "HIGH"}][:3],
             )
         )
 
