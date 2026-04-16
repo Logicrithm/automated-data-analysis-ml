@@ -6,7 +6,8 @@ def generate_business_impact(decision: dict | None, evidence: dict | None) -> st
     evidence = evidence or {}
 
     decision_name = str(decision.get("decision", "UNKNOWN"))
-    r2_pct = evidence.get("r2_percentage", evidence.get("r2_score", 0.0) * 100.0)
+    r2_percentage = evidence.get("r2_percentage")
+    r2_pct = r2_percentage if r2_percentage is not None else evidence.get("r2_score", 0.0) * 100.0
     r2_pct = max(0.0, min(100.0, float(r2_pct)))
     weak_pct = int(evidence.get("weak_feature_pct", 0))
     strongest_corr = float(evidence.get("strongest_correlation", evidence.get("strongest_corr", 0.0)))
