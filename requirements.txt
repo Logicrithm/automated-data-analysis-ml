@@ -6,3 +6,10 @@ matplotlib>=3.7.0
 seaborn>=0.12.0
 statsmodels>=0.14.0
 kaleido>=0.2.1
+streamlit==1.44.0
+protobuf>=3.20,<6
+alpaca-trade-api==3.2.0
+urllib3>=1.24,<2
+websockets>=9,<11
+requests>=2.31,<2.33
+charset_normalizer>=3.3,<4
