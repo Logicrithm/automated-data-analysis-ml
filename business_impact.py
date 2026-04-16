@@ -1,65 +1,47 @@
 from __future__ import annotations
 
 def generate_business_impact(decision: dict | None, evidence: dict | None) -> str:
-    """
-    Generate business-facing impact statement from decision + evidence.
-    
-    Args:
-        decision: Root cause decision from decision_engine
-        evidence: Quantified evidence from evidence.py
-        
-    Returns:
-        Plain-text business impact statement (no jargon)
-    """
     decision = decision or {}
     evidence = evidence or {}
-    
+
     decision_name = str(decision.get("decision", "UNKNOWN"))
-    r2_pct = float(evidence.get("r2_percentage", 0.0))
+    r2_percentage = evidence.get("r2_percentage")
+    r2_pct = r2_percentage if r2_percentage is not None else evidence.get("r2_score", 0.0) * 100.0
+    r2_pct = max(0.0, min(100.0, float(r2_pct)))
     weak_pct = int(evidence.get("weak_feature_pct", 0))
+    strongest_corr = float(evidence.get("strongest_correlation", evidence.get("strongest_corr", 0.0)))
     data_quality = float(evidence.get("data_quality_score", 0.0))
     missing_pct = float(evidence.get("missing_percentage", 0.0))
-    redundant_pairs = int(evidence.get("redundant_pairs_count", 0))
-    
-    # Decision-specific impact narratives
+    redundant_pairs = int(evidence.get("redundant_pairs_count", evidence.get("redundant_pairs", 0)))
+    nonlinear_gain = float(evidence.get("nonlinear_gain", 0.0))
+    total_features = int(evidence.get("total_features", 0))
+    unexplained_pct = max(0.0, 100.0 - r2_pct)
+
     if decision_name == "DATA_ISSUE":
         return (
-            f"Data quality at {data_quality:.1f}/100 with {missing_pct:.1f}% missing values "
-            f"makes predictive models unreliable. Current model fit (R²={r2_pct:.1f}%) cannot be trusted. "
-            f"Impact: Business decisions based on this data carry unquantified risk. "
-            f"Action priority: Data remediation before model deployment."
+            f"Data quality is {data_quality:.1f}/100 with {missing_pct:.1f}% missing values, "
+            f"so current predictions (R²={r2_pct:.1f}%) are not reliable for operational decisions."
         )
-    
-    elif decision_name == "MULTICOLLINEARITY":
+
+    if decision_name == "MULTICOLLINEARITY":
         return (
-            f"Detected {redundant_pairs} redundant feature pairs (overlapping signal). "
-            f"This causes model coefficients to become unstable and feature importance rankings unreliable. "
-            f"Impact: Model predictions are fragile—small data changes produce large prediction swings. "
-            f"Action priority: Feature reduction to stabilize interpretability."
+            f"{redundant_pairs} redundant feature pairs indicate overlapping signals; this can destabilize feature "
+            f"importance and create volatile decisions even when R² is {r2_pct:.1f}%."
         )
-    
-    elif decision_name == "NON_LINEARITY":
+
+    if decision_name == "NON_LINEARITY":
         return (
-            f"Linear models achieve only R²={r2_pct:.1f}%. The true relationship is non-linear. "
-            f"This means {100-r2_pct:.1f}% of variance is left unexplained by simple models. "
-            f"Impact: Predictive power is capped; business forecasts will be inaccurate. "
-            f"Action priority: Switch to tree-based or neural models to capture non-linear patterns."
+            f"Linear fit explains only {r2_pct:.1f}% variance while non-linear models improve by {nonlinear_gain:.2f} R², "
+            f"leaving {unexplained_pct:.1f}% variance under-captured by simple models."
         )
-    
-    elif decision_name == "FEATURE_GAP":
-        total_features = int(evidence.get("total_features", 0))
+
+    if decision_name == "FEATURE_GAP":
         return (
-            f"Only {total_features} features available with {weak_pct}% showing weak correlation. "
-            f"Current model fit plateaus at R²={r2_pct:.1f}%. "
-            f"Impact: Missing key business variables limits prediction capability; further model tuning will not help. "
-            f"Action priority: Collect additional domain variables (sales pipeline stage, competitor activity, etc.)."
+            f"Only {total_features} predictive features were available and {weak_pct}% are weak, "
+            f"which caps model quality at R²={r2_pct:.1f}% and limits forecast usefulness."
         )
-    
-    else:  # WEAK_FEATURES or fallback
-        return (
-            f"{weak_pct}% of features show weak correlation with target; "
-            f"strongest single feature correlation is only {evidence.get('strongest_correlation', 0.0):.2f}. "
-            f"Current fit (R²={r2_pct:.1f}%) is below useful threshold. "
-            f"Impact: Predictions will have high uncertainty margin; not suitable for high-stakes decisions. "
-            f"Action priority: Feature engineering to create more predictive variables."
-        )
+
+    return (
+        f"{weak_pct}% of features are weak and strongest correlation is {strongest_corr:.2f}; "
+        f"with R²={r2_pct:.1f}% ({unexplained_pct:.1f}% unexplained variance), predictions carry elevated uncertainty."
+    )

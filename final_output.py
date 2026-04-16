@@ -51,12 +51,17 @@ def generate_final_output(
             f"(Reason: {a.get('reason','N/A')}; Impact: {a.get('impact','N/A')}; Effort: {a.get('effort','N/A')})"
         )
 
+    evidence_summary = (
+        f"R²={r2_pct:.1f}%, weak_feature_pct={weak_pct}%, strongest_corr={strongest:.2f}, "
+        f"redundant_pairs={redundant}, max_corr={max_corr:.2f}, data_quality={dqs:.1f}/100, missing={miss:.1f}%."
+    )
+
     return (
         f"Problem:\n"
         f"{decision_name} (Severity: {severity})\n\n"
         f"Why:\n"
         f"{root_cause} {chain_txt}\n"
-        f"Evidence: R²={r2_pct:.1f}%, weak_feature_pct={weak_pct}%, strongest_corr={strongest:.2f}, "        f"redundant_pairs={redundant}, max_corr={max_corr:.2f}, data_quality={dqs:.1f}/100, missing={miss:.1f}%.\n\n"
+        f"Evidence: {evidence_summary}\n\n"
         f"Business Impact:\n"
         f"{business_impact}\n\n"
         f"Action Plan:\n"

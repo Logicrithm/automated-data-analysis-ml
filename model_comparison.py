@@ -10,6 +10,11 @@ from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_squared_error, r2_score
 from sklearn.model_selection import train_test_split
 
+try:
+    from xgboost import XGBRegressor
+except ImportError:
+    XGBRegressor = None
+
 RANDOM_STATE = 42
 MIN_TRAIN_TEST_SAMPLES = 20
 
@@ -55,8 +60,28 @@ def train_multiple_models(X: pd.DataFrame, y: pd.Series) -> Dict:
     model_specs = [
         ("Linear Regression", LinearRegression(), "HIGH"),
         ("Random Forest", RandomForestRegressor(random_state=RANDOM_STATE), "MEDIUM"),
-        ("Gradient Boosting", GradientBoostingRegressor(random_state=RANDOM_STATE), "MEDIUM"),
     ]
+    if XGBRegressor is not None:
+        model_specs.append(
+            (
+                "XGBoost",
+                XGBRegressor(
+                    n_estimators=200,
+                    max_depth=6,
+                    learning_rate=0.05,
+                    subsample=0.9,
+                    colsample_bytree=0.9,
+                    random_state=RANDOM_STATE,
+                    n_jobs=1,
+                    verbosity=0,
+                ),
+                "MEDIUM",
+            )
+        )
+    else:
+        model_specs.append(
+            ("Gradient Boosting", GradientBoostingRegressor(random_state=RANDOM_STATE), "MEDIUM")
+        )
 
     raw_records: List[Dict] = []
     for name, model, interpretability in model_specs:

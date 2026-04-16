@@ -7,7 +7,7 @@ Intelligent system for automated data analysis, pattern detection, and ML model 
 ✅ Context/domain inference (real estate / healthcare / business / generic)  
 ✅ Rule-chained recommendations with priority  
 ✅ Weighted confidence scoring (finding/reliability/domain/actionable/overall)  
-✅ Linear + Random Forest + Gradient Boosting comparison  
+✅ Linear + Random Forest + XGBoost comparison  
 ✅ Enhanced root-cause chain reasoning  
 ✅ Professional HTML reports  
 ✅ Model failure diagnosis
