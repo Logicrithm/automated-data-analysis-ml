@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Dict, List, Tuple
+from typing import Dict, List
 
 BASE_DATA_ISSUE_CONFIDENCE = 0.78
 DATA_ISSUE_CRITICAL_CONFIDENCE_BOOST = 0.15
@@ -61,9 +61,6 @@ def _legacy_diagnosis(decision: str, evidence: Dict) -> Dict:
     else:
         data_quality = "excellent"
 
-    if decision == "DATA_ISSUE":
-        model_perf = model_perf if model_perf != "good" else "moderate"
-
     return {
         "model_perf": model_perf,
         "feature_strength": feature_strength,
@@ -92,10 +89,6 @@ def _make_response(
 
 
 def decide_root_cause(evidence: Dict | None) -> Dict:
-    """
-    Decide one primary root cause from evidence using a deterministic hierarchy:
-    data -> structure -> model -> features.
-    """
     if not evidence:
         return _make_response(
             "UNKNOWN",
@@ -115,6 +108,9 @@ def decide_root_cause(evidence: Dict | None) -> Dict:
     weak_feature_pct = int(evidence.get("weak_feature_pct", 0))
     strongest_correlation = float(evidence.get("strongest_correlation", 0.0))
     total_features = int(evidence.get("total_features", 0))
+    nonlinear_gain = float(evidence.get("nonlinear_gain", 0.0))
+    best_model_r2 = evidence.get("best_model_r2")
+    best_model_r2 = float(best_model_r2) if best_model_r2 is not None else -1.0
 
     if data_quality_score < 70 or missing_percentage >= 10:
         severity = "CRITICAL" if data_quality_score < 60 or missing_percentage >= 20 else "HIGH"
@@ -123,10 +119,7 @@ def decide_root_cause(evidence: Dict | None) -> Dict:
             severity,
             BASE_DATA_ISSUE_CONFIDENCE + (DATA_ISSUE_CRITICAL_CONFIDENCE_BOOST if data_quality_score < 60 else 0.0),
             f"Data quality score {data_quality_score:.1f}/100; missing {missing_percentage:.1f}%",
-            [
-                "Poor data quality blocks reliable modeling",
-                f"R² currently {r2_score:.3f}",
-            ],
+            [f"R² currently {r2_score:.3f}"],
             evidence,
         )
 
@@ -137,36 +130,37 @@ def decide_root_cause(evidence: Dict | None) -> Dict:
             severity,
             BASE_MULTICOLLINEARITY_CONFIDENCE + min(redundant_pairs_count, MULTICOLLINEARITY_PAIR_CAP) * MULTICOLLINEARITY_PAIR_WEIGHT,
             f"{redundant_pairs_count} feature pairs above redundancy threshold (max {max_redundancy:.2f})",
-            [
-                f"Weak feature percentage {weak_feature_pct}%",
-                f"Model fit R²={r2_score:.3f}",
-            ],
+            [f"Weak feature percentage {weak_feature_pct}%", f"Model fit R²={r2_score:.3f}"],
             evidence,
         )
 
-    if poor_model_fit and strongest_correlation >= 0.2:
+    if weak_feature_pct >= 80 and strongest_correlation < 0.12 and best_model_r2 < 0.20:
+        return _make_response(
+            "WEAK_FEATURES",
+            "HIGH",
+            BASE_WEAK_FEATURE_CONFIDENCE + min(weak_feature_pct, WEAK_FEATURE_PERCENT_CAP) / WEAK_FEATURE_PERCENT_WEIGHT_DENOMINATOR,
+            f"{weak_feature_pct}% weak features; strongest correlation {strongest_correlation:.2f}",
+            [f"Best model R²={best_model_r2:.3f}", f"Linear model R²={r2_score:.3f}"],
+            evidence,
+        )
+
+    if poor_model_fit and nonlinear_gain >= 0.15 and best_model_r2 >= 0.25:
         return _make_response(
             "NON_LINEARITY",
             "HIGH" if r2_score < 0.2 else "MEDIUM",
-            BASE_NON_LINEARITY_CONFIDENCE + min(strongest_correlation, MAX_CORRELATION_CONFIDENCE_CAP) * NON_LINEARITY_CORRELATION_WEIGHT,
-            f"Strongest feature correlation {strongest_correlation:.2f} but R² only {r2_score:.3f}",
-            [
-                "Linear model underfits available signal",
-                f"Weak feature percentage {weak_feature_pct}%",
-            ],
+            BASE_NON_LINEARITY_CONFIDENCE + min(nonlinear_gain, MAX_CORRELATION_CONFIDENCE_CAP) * NON_LINEARITY_CORRELATION_WEIGHT,
+            f"Linear fit is weak (R²={r2_score:.3f}); non-linear gain={nonlinear_gain:.3f}",
+            [f"Best non-linear model R²={best_model_r2:.3f}"],
             evidence,
         )
 
-    if total_features < 5 and poor_model_fit:
+    if total_features < 3 and poor_model_fit and weak_feature_pct >= 85 and strongest_correlation < 0.10:
         return _make_response(
             "FEATURE_GAP",
             "HIGH",
-            0.7,
+            0.70,
             f"Only {total_features} features available with weak fit (R²={r2_score:.3f})",
-            [
-                f"Weak feature percentage {weak_feature_pct}%",
-                "Feature volume is too low for robust generalization",
-            ],
+            [f"Weak feature percentage {weak_feature_pct}%"],
             evidence,
         )
 
@@ -177,10 +171,7 @@ def decide_root_cause(evidence: Dict | None) -> Dict:
             severity,
             BASE_WEAK_FEATURE_CONFIDENCE + min(weak_feature_pct, WEAK_FEATURE_PERCENT_CAP) / WEAK_FEATURE_PERCENT_WEIGHT_DENOMINATOR,
             f"{weak_feature_pct}% weak features; strongest correlation {strongest_correlation:.2f}",
-            [
-                f"Model fit R²={r2_score:.3f}",
-                "Feature signal is insufficient for stable prediction",
-            ],
+            [f"Model fit R²={r2_score:.3f}"],
             evidence,
         )
 
@@ -189,9 +180,6 @@ def decide_root_cause(evidence: Dict | None) -> Dict:
         "LOW",
         0.55,
         "No critical risk thresholds crossed",
-        [
-            f"R²={r2_score:.3f}",
-            f"Weak feature percentage {weak_feature_pct}%",
-        ],
+        [f"R²={r2_score:.3f}", f"Weak feature percentage {weak_feature_pct}%"],
         evidence,
     )
