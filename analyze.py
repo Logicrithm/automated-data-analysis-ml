@@ -8,15 +8,18 @@ import numpy as np
 import pandas as pd
 
 from analysis import choose_target_column, run_regression_analysis
+from business_impact import generate_business_impact
 from confidence_calculator import calculate_weighted_confidence
 from consistency_validator import validate_consistency as validate_output_consistency
 from context import infer_domain
 from causal_layer import build_causal_explanation
 from data_quality_scorer import calculate_data_quality_score
+from dataset_validator import validate_dataset
 from decision_engine import decide_root_cause
 from deep_summary import generate_deep_summary
 from evidence import build_evidence
 from feature_analysis import analyze_features
+from final_output import generate_final_output
 from html_report import build_html_report
 from insights_generator import generate_ranked_insights
 from model_comparison import train_multiple_models
@@ -53,6 +56,7 @@ class DataAnalyzer:
             "visualizations": {},
             "data_quality": {},
             "model_comparison": {},
+            "final_output": "",
         }
 
     def load_data(self) -> pd.DataFrame:
@@ -126,7 +130,7 @@ class DataAnalyzer:
         """Calculate comprehensive data quality score"""
         if self.data is None:
             raise ValueError("Data is not loaded")
-        
+
         quality_result = calculate_data_quality_score(self.data)
         self.results["data_quality"] = quality_result
         return quality_result
@@ -135,30 +139,32 @@ class DataAnalyzer:
         """Detect multicollinearity in numeric features"""
         if self.data is None:
             raise ValueError("Data is not loaded")
-        
+
         numeric_cols = self.data.select_dtypes(include=[np.number]).columns.tolist()
         if len(numeric_cols) < 2:
             return {"high_vif_pairs": [], "vif_data": []}
-        
+
         X = self.data[numeric_cols]
         vif_data = detect_multicollinearity(X)
-        
+
         # Find high VIF pairs (correlation > 0.75)
         high_vif_pairs = []
         numeric_data = self.data[numeric_cols].corr()
-        
+
         for i in range(len(numeric_data.columns)):
-            for j in range(i+1, len(numeric_data.columns)):
+            for j in range(i + 1, len(numeric_data.columns)):
                 corr = abs(numeric_data.iloc[i, j])
                 if corr > 0.75:
-                    high_vif_pairs.append({
-                        "feature_a": numeric_data.columns[i],
-                        "feature_b": numeric_data.columns[j],
-                        "correlation": float(numeric_data.iloc[i, j]),
-                    })
-        
-        vif_list = vif_data.to_dict('records') if hasattr(vif_data, 'to_dict') else []
-        
+                    high_vif_pairs.append(
+                        {
+                            "feature_a": numeric_data.columns[i],
+                            "feature_b": numeric_data.columns[j],
+                            "correlation": float(numeric_data.iloc[i, j]),
+                        }
+                    )
+
+        vif_list = vif_data.to_dict("records") if hasattr(vif_data, "to_dict") else []
+
         return {
             "high_vif_pairs": high_vif_pairs,
             "vif_data": vif_list,
@@ -169,17 +175,17 @@ class DataAnalyzer:
         ml_results = self.results.get("ml_results", {})
         if ml_results.get("problem_type") != "regression":
             return {"models": [], "best_model": None}
-        
+
         target_column = ml_results.get("target_column")
         if not target_column or target_column not in self.data.columns:
             return {"models": [], "best_model": None}
-        
-        X = self.data.select_dtypes(include=[np.number]).drop(target_column, axis=1, errors='ignore')
+
+        X = self.data.select_dtypes(include=[np.number]).drop(target_column, axis=1, errors="ignore")
         y = self.data[target_column]
-        
+
         if X.empty or len(X) < 20:
             return {"models": [], "best_model": None}
-        
+
         comparison = train_multiple_models(X, y)
         self.results["model_comparison"] = comparison
         return comparison
@@ -194,28 +200,27 @@ class DataAnalyzer:
         """Calculate multi-dimensional confidence"""
         ml_results = self.results.get("ml_results", {})
         data_quality_obj = self.results.get("data_quality", {})
-        signals = self.results.get("signals", {})
-        
+
         # Extract quality metrics
         data_quality_score = (data_quality_obj.get("data_quality", {}).get("overall_score", 50) or 50) / 100
-        
+
         # Extract model performance
         r2 = float(ml_results.get("r2_score", 0.0))
         model_performance = min(1.0, r2 + 0.3)  # Normalize
-        
+
         # Extract feature relevance
         feature_importance = ml_results.get("standardized_importance", [])
         feature_relevance = feature_importance[0].get("importance", 0.0) if feature_importance else 0.3
-        
+
         # Domain confidence
         context = self.results.get("context", {})
         domain_confidence = context.get("confidence", 0.5)
-        
+
         # Actionability
         recommendations = self.results.get("recommendations", [])
         has_actions = bool(recommendations) if isinstance(recommendations, list) else False
         actionability = 0.9 if has_actions else 0.5
-        
+
         confidence = calculate_weighted_confidence(
             data_quality_score,
             model_performance,
@@ -223,7 +228,7 @@ class DataAnalyzer:
             domain_confidence,
             actionability,
         )
-        
+
         self.results["confidence"] = confidence
         return confidence
 
@@ -265,83 +270,69 @@ class DataAnalyzer:
         return str(json_path)
 
     def run_full_analysis(self, output_dir: str = "./output", target_column: Optional[str] = None) -> Dict:
-        """
-        Complete analysis pipeline with conflict resolution and structured diagnosis.
-        
-        Flow:
-        1. Load and analyze data
-        2. ML pipeline
-        3. Extract signals (NEW)
-        4. Infer domain (UPGRADED)
-        5. Data quality
-        6. Visualizations
-        7. Model comparison
-        8. RCA diagnosis (NEW)
-        9. Resolve conflicts (NEW - CRITICAL)
-        10. Generate recommendations (UPGRADED)
-        11. Generate insights
-        12. Calculate confidence
-        13. Validate
-        14. Generate reports
-        """
         np.random.seed(RANDOM_STATE)
-        
-        # Step 1-2: Load and analyze
+
+        # Load data
         self.load_data()
+
+        # Early hard validation gate
+        gate = validate_dataset(self.data, target_column)
+        if not gate.get("valid", False):
+            message = f"This dataset is insufficient for reliable analysis due to: {gate.get('reason', 'validation failure')}."
+            self.results["final_output"] = message
+            return {"final_output": message}
+
+        # Step 1-2: Overview + quality summary
         self.analyze_overview()
         quality_summary = self.quality_detection()
-        
+
         # Step 3: ML pipeline
         self.ml_pipeline(target_column)
         ml_results = self.results.get("ml_results", {})
         target_col = ml_results.get("target_column") or target_column
-        
-        # Step 4: Extract signals (NEW)
+
+        # If no suitable target found, fail cleanly (business-facing)
+        if not target_col:
+            message = "This dataset is insufficient for reliable analysis due to: no suitable numerical target column."
+            self.results["final_output"] = message
+            return {"final_output": message}
+
+        # Step 4: Signals + context
         self.results["signals"] = extract_signals(self.data, target_col)
-        
-        # Step 5: Infer domain (UPGRADED)
         self.results["context"] = infer_domain(self.results["signals"], self.data)
-        
-        # Step 6: Data quality
+
+        # Step 5: data quality + visuals + model comparison
         self.calculate_data_quality()
-        
-        # Step 7: Visualizations
         self.visualizations(output_dir)
-        
-        # Step 8: Model comparison
         self.generate_model_comparison()
-        
-        # Step 12: Multicollinearity detection
+
+        # Step 6: insights/confidence
         multicollinearity = self.detect_multicollinearity()
-        
-        # Step 13: Generate insights
         self.generate_insights(quality_summary, multicollinearity)
-        
-        # Step 14: Calculate confidence
         self.calculate_confidence_scores()
-        
-        # Step 15: Validate
         self.validate_consistency()
 
-        # Phase 3: Add deep analysis layers
+        # Step 7: Feature analysis + evidence
         feature_analysis = analyze_features(self.data, target_col)
         self.results["feature_analysis"] = feature_analysis
+        ml_results["model_comparison"] = self.results.get("model_comparison", {})
 
-        # Phase 4: Build evidence and run the decision architecture once.
         evidence = build_evidence(
             self.results["signals"],
             feature_analysis,
             ml_results,
-            self.results["diagnosis"],
+            self.results.get("diagnosis"),
         )
         self.results["evidence"] = evidence
 
+        # Step 8: Decision + causality
         decision = decide_root_cause(evidence)
         self.results["diagnosis"] = decision
 
         causal_layer = build_causal_explanation(evidence, decision, ml_results)
         self.results["causal_layer"] = causal_layer
 
+        # Step 9: Recommendations
         recommendations = generate_recommendations_v2(
             decision,
             evidence,
@@ -350,6 +341,7 @@ class DataAnalyzer:
         )
         self.results["recommendations"] = recommendations
 
+        # Step 10: Model interpretation + deep summary
         model_interpretation = interpret_models(ml_results, self.results["diagnosis"])
         self.results["model_interpretation"] = model_interpretation
 
@@ -358,15 +350,38 @@ class DataAnalyzer:
             decision,
             causal_layer,
         )
-        validated = validate_output_consistency(decision, recommendations, deep_summary, self.results.get("verdict"))
+
+        validated = validate_output_consistency(
+            decision,
+            recommendations,
+            deep_summary,
+            self.results.get("verdict"),
+        )
         self.results["recommendations"] = validated.get("recommendations", recommendations)
         self.results["deep_summary"] = validated.get("deep_summary", deep_summary)
         self.results["verdict"] = validated.get("verdict", {})
         self.results["validation_report"] = validated.get("validation_report", {})
-        
+
+        # Step 11: Business impact + strict final output
+        business_impact = generate_business_impact(self.results["diagnosis"], self.results["evidence"])
+
+        final_text = generate_final_output(
+            decision=self.results["diagnosis"],
+            evidence=self.results["evidence"],
+            causal_layer=self.results["causal_layer"],
+            recommendations=self.results["recommendations"],
+            business_impact=business_impact,
+        )
+        self.results["final_output"] = final_text
+
+        # Still store artifacts for internal debugging/audit, but user-facing output is final_output only
+        html_path = self.generate_html_report(output_dir)
+        json_path = self.export_json(output_dir)
+
         return {
-            "html": self.generate_html_report(output_dir),
-            "json": self.export_json(output_dir),
+            "final_output": final_text,
+            "html": html_path,
+            "json": json_path,
         }
 
 
@@ -382,9 +397,5 @@ if __name__ == "__main__":
     analyzer = DataAnalyzer(args.data_path)
     output = analyzer.run_full_analysis(args.output_dir, args.target_column)
 
-    print(f"HTML report: {output['html']}")
-    print(f"JSON output: {output['json']}")
-    print("Top insights:")
-    for item in analyzer.results.get("insights", []):
-        content = item.get("content", "No content") if isinstance(item, dict) else str(item)
-        print(f"- {content}")
+    # STRICT USER-FACING OUTPUT
+    print(output.get("final_output", "No final output generated."))
