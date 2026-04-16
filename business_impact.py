@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-
 def generate_business_impact(decision: dict | None, evidence: dict | None) -> str:
     decision = decision or {}
     evidence = evidence or {}
