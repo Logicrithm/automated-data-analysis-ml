@@ -20,7 +20,7 @@ from deep_summary import generate_deep_summary
 from evidence import build_evidence
 from feature_analysis import analyze_features
 from final_output import generate_final_output
-from html_report import build_html_report
+from html_report_professional import build_professional_html_report
 from insights_generator import generate_ranked_insights
 from model_comparison import train_multiple_models
 from model_interpreter import interpret_models
@@ -56,6 +56,8 @@ class DataAnalyzer:
             "visualizations": {},
             "data_quality": {},
             "model_comparison": {},
+            "statistical_summary": [],
+            "business_impact": "",
             "final_output": "",
         }
 
@@ -93,6 +95,34 @@ class DataAnalyzer:
         ]
         summary = {"total_missing": total_missing, "issues": issues}
         self.results["quality_issues"] = issues
+        return summary
+
+    def generate_statistical_summary(self) -> List[Dict]:
+        if self.data is None:
+            raise ValueError("Data is not loaded")
+
+        numeric_df = self.data.select_dtypes(include=[np.number])
+        if numeric_df.empty:
+            self.results["statistical_summary"] = []
+            return []
+
+        summary: List[Dict] = []
+        for col in numeric_df.columns:
+            series = numeric_df[col].dropna()
+            if series.empty:
+                continue
+            summary.append(
+                {
+                    "feature": col,
+                    "mean": float(series.mean()),
+                    "median": float(series.median()),
+                    "std_dev": float(series.std(ddof=0)),
+                    "q1": float(series.quantile(0.25)),
+                    "q3": float(series.quantile(0.75)),
+                }
+            )
+
+        self.results["statistical_summary"] = summary
         return summary
 
     def ml_pipeline(self, target_column: Optional[str] = None) -> Dict:
@@ -255,7 +285,7 @@ class DataAnalyzer:
     def generate_html_report(self, output_dir: str) -> str:
         output_path = Path(output_dir)
         output_path.mkdir(parents=True, exist_ok=True)
-        html_content = build_html_report(self.results, self.results.get("visualizations", {}))
+        html_content = build_professional_html_report(self.results, self.results.get("visualizations", {}))
         html_path = output_path / "report.html"
         with open(html_path, "w", encoding="utf-8") as handle:
             handle.write(html_content)
@@ -284,6 +314,7 @@ class DataAnalyzer:
 
         # Step 1-2: Overview + quality summary
         self.analyze_overview()
+        self.generate_statistical_summary()
         quality_summary = self.quality_detection()
 
         # Step 3: ML pipeline
@@ -364,6 +395,7 @@ class DataAnalyzer:
 
         # Step 11: Business impact + strict final output
         business_impact = generate_business_impact(self.results["diagnosis"], self.results["evidence"])
+        self.results["business_impact"] = business_impact
 
         final_text = generate_final_output(
             decision=self.results["diagnosis"],
