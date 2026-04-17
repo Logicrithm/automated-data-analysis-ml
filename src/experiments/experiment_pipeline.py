@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Dict, List, Optional
+import warnings
 
 import numpy as np
 import pandas as pd
@@ -13,7 +14,14 @@ from statsmodels.stats.outliers_influence import variance_inflation_factor
 
 
 class ExperimentPipeline:
-    """Run controlled experiments to validate model-improvement recommendations."""
+    """Run controlled experiments to validate model-improvement recommendations.
+
+    Parameters:
+        X: Feature matrix as DataFrame or array-like.
+        y: Target values as Series or array-like.
+        test_size: Fraction of rows reserved for test evaluation.
+        random_state: Random seed used for split/model reproducibility.
+    """
 
     def __init__(
         self,
@@ -56,7 +64,11 @@ class ExperimentPipeline:
         if feature_df.empty:
             return pd.DataFrame(), pd.Series(dtype=float)
 
-        feature_df = feature_df.fillna(feature_df.median(numeric_only=True)).fillna(0.0)
+        # Median fill handles most missing numeric values; fallback to 0.0 for all-NaN columns.
+        median_values = feature_df.median(numeric_only=True)
+        feature_df = feature_df.fillna(median_values)
+        if feature_df.isna().values.any():
+            feature_df = feature_df.fillna(0.0)
 
         if isinstance(y, pd.Series):
             target = y.copy()
@@ -98,7 +110,9 @@ class ExperimentPipeline:
             predictions = model.predict(X_test)
             r2_value = float(r2_score(self.y_test, predictions))
 
-            cv_folds = min(5, len(self.y_train))
+            # Min 2 folds is required for CV; max 5 keeps validation lightweight.
+            # Using len(y_train)//2 keeps roughly >=2 samples per fold for stability.
+            cv_folds = max(2, min(5, len(self.y_train) // 2))
             if cv_folds >= 2:
                 cv_scores = cross_val_score(model, X_train, self.y_train, cv=cv_folds, scoring="r2")
                 result["cv_r2_mean"] = float(np.mean(cv_scores))
@@ -119,13 +133,16 @@ class ExperimentPipeline:
         vif_scores: List[float] = []
         for i in range(X_scaled.shape[1]):
             try:
-                vif = float(variance_inflation_factor(X_scaled, i))
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore", RuntimeWarning)
+                    vif = float(variance_inflation_factor(X_scaled, i))
             except Exception:
                 vif = float("inf")
             vif_scores.append(vif)
         return vif_scores
 
     def run_remove_vif(self, threshold: float = 5.0) -> float:
+        """Drop features with VIF above threshold (default 5.0 indicates high multicollinearity)."""
         metadata: Dict = {"threshold": threshold, "removed_features": [], "vif_scores": {}}
         try:
             scaler = StandardScaler()
@@ -152,6 +169,7 @@ class ExperimentPipeline:
             return self._evaluate_model("remove_vif", self.X_train, self.X_test, metadata)
 
     def run_pca(self, variance_ratio: float = 0.95) -> float:
+        """Apply PCA keeping at least `variance_ratio` cumulative explained variance."""
         metadata: Dict = {"variance_ratio": variance_ratio, "n_components": None}
         try:
             scaler = StandardScaler()
@@ -181,14 +199,21 @@ class ExperimentPipeline:
             if not columns:
                 return self._evaluate_model("feature_engineering", X_train_eng, X_test_eng, metadata)
 
+            existing_names = set(X_train_eng.columns)
+
             base_feature = columns[0]
             squared_name = f"{base_feature}_squared"
+            if squared_name in existing_names:
+                squared_name = f"{base_feature}_squared_eng"
             X_train_eng[squared_name] = self.X_train[base_feature] ** 2
             X_test_eng[squared_name] = self.X_test[base_feature] ** 2
             metadata["added_features"].append(squared_name)
+            existing_names.add(squared_name)
 
             if len(columns) >= 2:
                 interaction_name = f"{columns[0]}_x_{columns[1]}"
+                if interaction_name in existing_names:
+                    interaction_name = f"{interaction_name}_eng"
                 X_train_eng[interaction_name] = self.X_train[columns[0]] * self.X_train[columns[1]]
                 X_test_eng[interaction_name] = self.X_test[columns[0]] * self.X_test[columns[1]]
                 metadata["added_features"].append(interaction_name)
@@ -220,6 +245,7 @@ class ExperimentPipeline:
                 "method": None,
                 "improvement_percent": 0.0,
                 "improvement_absolute": 0.0,
+                "improvement_basis": "not_available",
                 "all_results": self.results,
             }
 
@@ -229,17 +255,25 @@ class ExperimentPipeline:
 
         improvement_absolute = float(best_r2 - baseline_r2) if np.isfinite(baseline_r2) else 0.0
 
-        if np.isfinite(baseline_r2) and baseline_r2 != 0:
+        if np.isfinite(baseline_r2) and baseline_r2 > 0:
+            improvement_percent = float((improvement_absolute / baseline_r2) * 100)
+            improvement_basis = "relative_to_baseline_r2"
+        elif np.isfinite(baseline_r2) and baseline_r2 < 0:
+            # For negative baseline R², normalize by its magnitude to express recovery.
             improvement_percent = float((improvement_absolute / abs(baseline_r2)) * 100)
+            improvement_basis = "relative_to_abs_baseline_r2"
         elif improvement_absolute > 0:
             improvement_percent = float("inf")
+            improvement_basis = "improvement_from_zero_baseline"
         else:
             improvement_percent = 0.0
+            improvement_basis = "no_improvement"
 
         return {
             "method": best_method,
             "improvement_percent": improvement_percent,
             "improvement_absolute": improvement_absolute,
+            "improvement_basis": improvement_basis,
             "all_results": self.results,
         }
 
@@ -252,6 +286,7 @@ class ExperimentPipeline:
             "best_method": best["method"],
             "improvement_percent": best["improvement_percent"],
             "improvement_absolute": best["improvement_absolute"],
+            "improvement_basis": best["improvement_basis"],
         }
 
     def print_summary(self) -> None:
