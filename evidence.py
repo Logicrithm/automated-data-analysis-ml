@@ -1,3 +1,4 @@
+# evidence.py (COMPLETE REPLACEMENT)
 from __future__ import annotations
 
 
@@ -40,6 +41,12 @@ def build_evidence(
     if linear_r2 is not None and best_r2 is not None:
         nonlinear_gain = best_r2 - linear_r2
 
+    # ✅ FIX #2: ADD best_improvement tracking
+    # This is critical for decision logic: if all experiments fail (<5%), primary issue is WEAK_SIGNAL
+    best_improvement = 0.0
+    if linear_r2 is not None and r2_score > 0:
+        best_improvement = max(0.0, nonlinear_gain)  # Improvement from best model
+    
     return {
         "weak_features": weak_features,
         "total_features": predictor_count,
@@ -54,6 +61,7 @@ def build_evidence(
         "linear_r2": round(float(linear_r2), 4) if linear_r2 is not None else None,
         "best_model_r2": round(float(best_r2), 4) if best_r2 is not None else None,
         "nonlinear_gain": round(float(nonlinear_gain), 4),
+        "best_improvement": round(float(best_improvement), 4),  # NEW: Critical for decision logic
         "strongest_corr": round(strongest_corr, 2),
         "redundant_pairs": int(num_redundant),
         "max_corr": round(max_redundancy, 2),
