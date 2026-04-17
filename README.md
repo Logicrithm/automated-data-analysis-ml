@@ -21,3 +21,26 @@ python analyze.py <data.csv> [output_dir] [target_column]
 - Identifies model performance issues
 - Ranks insights by importance
 - Provides actionable recommendations
+
+## Experimental Validation Layer
+Use the minimal experiment pipeline to validate recommendations with proof:
+
+```python
+import pandas as pd
+from src.experiments import ExperimentPipeline
+
+df = pd.read_csv("data.csv")
+X = df.drop(columns=["target"])
+y = df["target"]
+
+pipeline = ExperimentPipeline(X, y)
+pipeline.run_all()
+results = pipeline.get_structured_results()
+print(results["best_method"], results["improvement_percent"])
+```
+
+Included experiments:
+- Baseline model score
+- Remove high-VIF features (threshold 5.0)
+- PCA (95% explained variance)
+- Simple feature engineering (interaction + polynomial)
