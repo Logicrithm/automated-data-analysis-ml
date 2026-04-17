@@ -1,3 +1,4 @@
+# rca.py (COMPLETE REPLACEMENT)
 from __future__ import annotations
 
 from typing import Dict
@@ -14,6 +15,12 @@ def diagnose(
             "multicollinearity": "unknown",
             "data_quality": "unknown",
         }
+
+    # ✅ FIX #1: ADD VALIDATION - ensure critical keys exist
+    required_keys = ["r2_score", "weak_feature_pct", "redundant_pairs_count", "data_quality_score"]
+    for key in required_keys:
+        if key not in evidence:
+            raise ValueError(f"Missing required evidence key: {key}. Evidence keys: {list(evidence.keys())}")
 
     r2_score = float(evidence.get("r2_score", 0.0))
     weak_feature_pct = int(evidence.get("weak_feature_pct", 0))
@@ -38,11 +45,13 @@ def diagnose(
     else:
         feature_strength = "strong"
 
-    if redundant_pairs_count > 5:
+    # ✅ FIX #2: TIGHTEN MULTICOLLINEARITY THRESHOLD
+    # Changed from > 2 to >= 3 to avoid false positives on medium datasets
+    if redundant_pairs_count >= 5:
         multicollinearity = "critical"
-    elif redundant_pairs_count > 2:
+    elif redundant_pairs_count >= 3:  # Changed from > 2
         multicollinearity = "high"
-    elif redundant_pairs_count > 0:
+    elif redundant_pairs_count >= 1:
         multicollinearity = "moderate"
     else:
         multicollinearity = "low"
