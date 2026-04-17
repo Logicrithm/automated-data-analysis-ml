@@ -1,9 +1,11 @@
+# insights_generator.py (COMPLETE REPLACEMENT)
 from __future__ import annotations
 
 from typing import Dict, List
 
 # Treat R² below 0.30 as weak predictive utility for action prioritization.
 LOW_MODEL_THRESHOLD = 0.3
+IMPROVEMENT_THRESHOLD = 0.05  # 5% - below this is negligible
 
 
 def _insight(
@@ -55,12 +57,24 @@ def generate_ranked_insights(results: Dict, quality_summary: Dict, confidence_sc
     rca = results.get("root_cause_analysis") or {}
     context = results.get("context") or {}
     data_quality = (results.get("data_quality") or {}).get("data_quality") or {}
+    evidence = results.get("evidence") or {}
 
     r2_value = float(ml_results.get("r2_score", 0.0))
     target_column = ml_results.get("target_column", "target")
     strongest_feature = ml_results.get("strongest_feature", "top feature")
     explained_pct = r2_value * 100
     unexplained_pct = 100.0 - explained_pct
+    
+    # ✅ FIX #3: ADD EXPERIMENT INTERPRETATION
+    # Check if best_improvement indicates negligible gains
+    best_improvement = float(evidence.get("best_improvement", 0.0))
+    improvement_meaningful = best_improvement >= IMPROVEMENT_THRESHOLD
+    
+    improvement_note = (
+        f"Best experiment improvement: +{best_improvement*100:.1f}% (meaningful)"
+        if improvement_meaningful
+        else f"Best experiment improvement: +{best_improvement*100:.1f}% (below {IMPROVEMENT_THRESHOLD*100:.0f}% threshold → negligible)"
+    )
 
     insights: List[Dict] = []
     model_actions = recommendations[:3]
@@ -76,7 +90,8 @@ def generate_ranked_insights(results: Dict, quality_summary: Dict, confidence_sc
             category="MODEL_PERFORMANCE",
             content=(
                 f"{performance_prefix}Model explains only {explained_pct:.1f}% of {target_column} variance "
-                f"({strongest_feature} strongest), leaving {unexplained_pct:.1f}% unexplained."
+                f"({strongest_feature} strongest), leaving {unexplained_pct:.1f}% unexplained. "
+                f"{improvement_note}."  # NEW: Quantified experiment results
             ),
             root_cause=rca.get("root_cause", "Feature set insufficient for robust prediction."),
             confidence=confidence_scores,
@@ -94,58 +109,27 @@ def generate_ranked_insights(results: Dict, quality_summary: Dict, confidence_sc
                 severity="HIGH",
                 category="MULTICOLLINEARITY",
                 content=(
-                    f"Strong multicollinearity: {pair['feature_a']} (VIF={vif_map.get(pair['feature_a'], 0.0):.1f}) "
-                    f"correlates {pair['correlation']:.2f} with {pair['feature_b']} "
-                    f"(VIF={vif_map.get(pair['feature_b'], 0.0):.1f})."
+                    f"Detected redundant feature pair: {pair.get('feature_a', 'feature1')} ↔ {pair.get('feature_b', 'feature2')} "
+                    f"(r={pair.get('correlation', 0.0):.2f}). May cause unstable coefficient attribution."
                 ),
-                root_cause="Redundant features are measuring similar signal.",
-                confidence={**confidence_scores, "finding": 0.99},
-                actions=[item for item in recommendations if item.get("priority") in {"CRITICAL", "HIGH"}][:3],
+                root_cause="Feature redundancy detected; not primary cause of low R².",
+                confidence={"multicollinearity_likelihood": 0.85},
+                actions=recommendations[1:3] if len(recommendations) > 1 else [],
             )
         )
 
-    total_missing = int(quality_summary.get("total_missing", 0))
-    duplicate_rows = int(quality_summary.get("duplicate_rows", 0))
-    quality_text = (
-        f"Data quality score is {data_quality.get('overall_score', 0):.1f}/100 with grade "
-        f"{(results.get('data_quality') or {}).get('grade', 'N/A')}."
-    )
-    if total_missing or duplicate_rows:
-        quality_text += (
-            f" Found {total_missing} missing values and {duplicate_rows} duplicate rows needing treatment."
+    issue_count = len(quality_summary.get("issues", []))
+    if issue_count > 0:
+        insights.append(
+            _insight(
+                rank=3,
+                severity="MEDIUM",
+                category="DATA_QUALITY",
+                content=f"Detected {issue_count} data quality issue(s). Address before advanced modeling.",
+                root_cause="Data defects can limit model performance.",
+                confidence={"data_quality_concern": 0.7},
+                actions=recommendations[2:4] if len(recommendations) > 2 else [],
+            )
         )
-    else:
-        quality_text += " Completeness and uniqueness are strong."
-    insights.append(
-        _insight(
-            rank=3,
-            severity="MEDIUM",
-            category="DATA_QUALITY",
-            content=quality_text,
-            root_cause="Outliers and schema consistency influence downstream reliability.",
-            confidence=confidence_scores,
-            actions=[{"priority": "HIGH", "action": "Apply data cleaning checks"}],
-        )
-    )
 
-    insights.append(
-        _insight(
-            rank=4,
-            severity="MEDIUM",
-            category="CONTEXT",
-            content=(
-                f"Domain inferred as {context.get('domain', 'generic')} "
-                f"({context.get('confidence', 'LOW')} confidence): {context.get('context', 'Generic dataset')}."
-            ),
-            root_cause="Domain context inferred from column keywords and structure.",
-            confidence=confidence_scores,
-            actions=[{"priority": "MEDIUM", "action": "Validate inferred domain with stakeholder input"}],
-        )
-    )
-
-    deduped = _deduplicate(insights)
-    severity_rank = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3}
-    deduped.sort(key=lambda item: (severity_rank.get(item.get("severity"), 99), item.get("rank", 99)))
-    for idx, item in enumerate(deduped, start=1):
-        item["rank"] = idx
-    return deduped
+    return _deduplicate(insights)
