@@ -116,7 +116,7 @@ class DataAnalyzer:
                     "feature": col,
                     "mean": float(series.mean()),
                     "median": float(series.median()),
-                    "std_dev": float(series.std(ddof=0)),
+                    "std_dev": float(series.std(ddof=1) if len(series) > 1 else 0.0),
                     "q1": float(series.quantile(0.25)),
                     "q3": float(series.quantile(0.75)),
                 }
@@ -287,16 +287,21 @@ class DataAnalyzer:
         output_path.mkdir(parents=True, exist_ok=True)
         html_content = build_professional_html_report(self.results, self.results.get("visualizations", {}))
         html_path = output_path / "report.html"
-        with open(html_path, "w", encoding="utf-8") as handle:
-            handle.write(html_content)
+        try:
+            html_path.write_text(html_content, encoding="utf-8")
+        except OSError as exc:
+            raise RuntimeError(f"Failed to write HTML report to {html_path}") from exc
         return str(html_path)
 
     def export_json(self, output_dir: str) -> str:
         output_path = Path(output_dir)
         output_path.mkdir(parents=True, exist_ok=True)
         json_path = output_path / "analysis_results.json"
-        with open(json_path, "w", encoding="utf-8") as handle:
-            json.dump(self.results, handle, indent=2, ensure_ascii=False)
+        json_payload = json.dumps(self.results, indent=2, ensure_ascii=False)
+        try:
+            json_path.write_text(json_payload, encoding="utf-8")
+        except OSError as exc:
+            raise RuntimeError(f"Failed to write analysis JSON to {json_path}") from exc
         return str(json_path)
 
     def run_full_analysis(self, output_dir: str = "./output", target_column: Optional[str] = None) -> Dict:

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
+BASELINE_QUALITY_THRESHOLD = 70.0
+
 
 def _to_float(value: Any, default: float = 0.0) -> float:
     try:
@@ -36,7 +38,7 @@ def calculate_financial_impact(results: Dict[str, Any], config: Dict[str, Any]) 
     quality_penalty_weight = max(0.0, _to_float(financial_cfg.get("quality_penalty_weight"), 0.05))
 
     reliability_gap = max(0.0, 1.0 - r2)
-    quality_gap = max(0.0, (70.0 - data_quality_score) / 70.0)
+    quality_gap = max(0.0, (BASELINE_QUALITY_THRESHOLD - data_quality_score) / BASELINE_QUALITY_THRESHOLD)
     weak_feature_factor = 1.0 + (weak_feature_pct / 100.0)
 
     annual_value_at_stake = monthly_decisions * avg_decision_value * 12.0
@@ -51,13 +53,18 @@ def calculate_financial_impact(results: Dict[str, Any], config: Dict[str, Any]) 
     break_even_months = (implementation_cost / monthly_benefit) if monthly_benefit > 0 else None
 
     decision_name = str(diagnosis.get("decision", "UNKNOWN"))
-    narrative = (
-        f"For {decision_name}, improving data and feature reliability is estimated to protect "
-        f"${estimated_avoidable_loss:,.0f} annually, with projected ROI of {roi_percent:.1f}% "
-        f"and break-even in {break_even_months:.1f} months."
-        if break_even_months is not None
-        else f"For {decision_name}, projected annual benefit is ${estimated_avoidable_loss:,.0f}; break-even cannot be estimated."
-    )
+    if break_even_months is not None:
+        break_even_text = f"{break_even_months:.1f}"
+        narrative = (
+            f"For {decision_name}, improving data and feature reliability is estimated to protect "
+            f"${estimated_avoidable_loss:,.0f} annually, with projected ROI of {roi_percent:.1f}% "
+            f"and break-even in {break_even_text} months."
+        )
+    else:
+        narrative = (
+            f"For {decision_name}, projected annual benefit is ${estimated_avoidable_loss:,.0f}; "
+            "break-even cannot be estimated."
+        )
 
     return {
         "annual_value_at_stake": round(annual_value_at_stake, 2),
