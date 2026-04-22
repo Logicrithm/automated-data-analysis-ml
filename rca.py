@@ -8,19 +8,27 @@ def diagnose(
     signals: Dict | None = None, ml_results: Dict | None = None, evidence: Dict | None = None
 ) -> Dict:
     _ = (signals, ml_results)  # Retained for compatibility and potential fallback diagnostics.
-    if not evidence:
+    if not evidence or not isinstance(evidence, dict):
         return {
             "model_perf": "unknown",
             "feature_strength": "unknown",
             "multicollinearity": "unknown",
             "data_quality": "unknown",
+            "evidence_used": False,
         }
 
     # ✅ FIX #1: ADD VALIDATION - ensure critical keys exist
     required_keys = ["r2_score", "weak_feature_pct", "redundant_pairs_count", "data_quality_score"]
-    for key in required_keys:
-        if key not in evidence:
-            raise ValueError(f"Missing required evidence key: {key}. Evidence keys: {list(evidence.keys())}")
+    missing_keys = [key for key in required_keys if key not in evidence]
+    if missing_keys:
+        return {
+            "model_perf": "unknown",
+            "feature_strength": "unknown",
+            "multicollinearity": "unknown",
+            "data_quality": "unknown",
+            "evidence_used": False,
+            "validation_errors": [f"Missing required evidence key: {key}" for key in missing_keys],
+        }
 
     r2_score = float(evidence.get("r2_score", 0.0))
     weak_feature_pct = int(evidence.get("weak_feature_pct", 0))

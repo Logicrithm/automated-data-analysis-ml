@@ -55,6 +55,7 @@ def generate_ranked_insights(results: Dict, quality_summary: Dict, confidence_sc
     else:
         recommendations = []
     rca = results.get("root_cause_analysis") or {}
+    decision = results.get("diagnosis") or {}
     context = results.get("context") or {}
     data_quality = (results.get("data_quality") or {}).get("data_quality") or {}
     evidence = results.get("evidence") or {}
@@ -67,13 +68,16 @@ def generate_ranked_insights(results: Dict, quality_summary: Dict, confidence_sc
     
     # ✅ FIX #3: ADD EXPERIMENT INTERPRETATION
     # Check if best_improvement indicates negligible gains
-    best_improvement = float(evidence.get("best_improvement", 0.0))
+    best_improvement = float(evidence.get("best_improvement", decision.get("best_improvement", 0.0)))
     improvement_meaningful = best_improvement >= IMPROVEMENT_THRESHOLD
     
     improvement_note = (
         f"Best experiment improvement: +{best_improvement*100:.1f}% (meaningful)"
         if improvement_meaningful
-        else f"Best experiment improvement: +{best_improvement*100:.1f}% (below {IMPROVEMENT_THRESHOLD*100:.0f}% threshold → negligible)"
+        else (
+            f"Best experiment improvement: +{best_improvement*100:.1f}% "
+            f"(below {IMPROVEMENT_THRESHOLD*100:.0f}% threshold → negligible; no tested method materially helps)"
+        )
     )
 
     insights: List[Dict] = []

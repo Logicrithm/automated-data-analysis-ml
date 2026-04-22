@@ -8,8 +8,9 @@ def build_evidence(
     _ = diagnosis
 
     weak_features = int(feature_analysis.get("weak_features", 0))
-    predictor_count = int(feature_analysis.get("predictor_count", 0))
+    predictor_count = int(feature_analysis.get("predictor_count", feature_analysis.get("total_features", 0)))
     weak_feature_pct = int(round((weak_features / max(predictor_count, 1)) * 100))
+    weak_feature_pct = max(0, min(100, weak_feature_pct))
 
     correlations = signals.get("correlations", [])
     if not correlations and "max_correlation" in signals:
@@ -44,7 +45,7 @@ def build_evidence(
     # ✅ FIX #2: ADD best_improvement tracking
     # This is critical for decision logic: if all experiments fail (<5%), primary issue is WEAK_SIGNAL
     best_improvement = 0.0
-    if linear_r2 is not None and r2_score > 0:
+    if linear_r2 is not None and best_r2 is not None:
         best_improvement = max(0.0, nonlinear_gain)  # Improvement from best model
     
     return {
@@ -66,7 +67,7 @@ def build_evidence(
         "redundant_pairs": int(num_redundant),
         "max_corr": round(max_redundancy, 2),
         "has_weak_features": weak_feature_pct > 50,
-        "has_redundancy": num_redundant > 2,
+        "has_redundancy": num_redundant >= 3,
         "poor_model_fit": r2_score < 0.3,
         "poor_data_quality": data_quality_score < 70,
     }

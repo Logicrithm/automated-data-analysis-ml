@@ -13,6 +13,7 @@ NON_LINEARITY_CORRELATION_WEIGHT = 0.3
 BASE_WEAK_FEATURE_CONFIDENCE = 0.65
 WEAK_FEATURE_PERCENT_CAP = 90
 WEAK_FEATURE_PERCENT_WEIGHT_DENOMINATOR = 300
+MEANINGFUL_IMPROVEMENT_THRESHOLD = 0.05
 
 
 def _clip_confidence(value: float) -> float:
@@ -43,11 +44,11 @@ def _legacy_diagnosis(decision: str, evidence: Dict) -> Dict:
     else:
         feature_strength = "strong"
 
-    if redundant_pairs_count > 5:
+    if redundant_pairs_count >= 5:
         multicollinearity = "critical"
-    elif redundant_pairs_count > 2:
+    elif redundant_pairs_count >= 3:
         multicollinearity = "high"
-    elif redundant_pairs_count > 0:
+    elif redundant_pairs_count >= 1:
         multicollinearity = "moderate"
     else:
         multicollinearity = "low"
@@ -84,6 +85,12 @@ def _make_response(
         "dominant_signal": dominant_signal,
         "secondary_signals": [item for item in secondary_signals if item],
     }
+    if "r2_score" in evidence:
+        response["r2_score"] = float(evidence.get("r2_score", 0.0))
+    if "best_improvement" in evidence:
+        response["best_improvement"] = float(evidence.get("best_improvement", 0.0))
+    if "redundant_pairs_count" in evidence:
+        response["redundant_pairs_count"] = int(evidence.get("redundant_pairs_count", 0))
     response.update(_legacy_diagnosis(decision, evidence))
     return response
 
@@ -109,6 +116,7 @@ def decide_root_cause(evidence: Dict | None) -> Dict:
     strongest_correlation = float(evidence.get("strongest_correlation", 0.0))
     total_features = int(evidence.get("total_features", 0))
     nonlinear_gain = float(evidence.get("nonlinear_gain", 0.0))
+    best_improvement = float(evidence.get("best_improvement", 0.0))
     best_model_r2 = evidence.get("best_model_r2")
     best_model_r2 = float(best_model_r2) if best_model_r2 is not None else -1.0
 
@@ -123,7 +131,25 @@ def decide_root_cause(evidence: Dict | None) -> Dict:
             evidence,
         )
 
-    if redundant_pairs_count > 2 or max_redundancy >= 0.85:
+    if r2_score < 0.10:
+        improvement_note = (
+            f"best improvement +{best_improvement * 100:.1f}% is negligible"
+            if best_improvement < MEANINGFUL_IMPROVEMENT_THRESHOLD
+            else f"best improvement +{best_improvement * 100:.1f}% still leaves very low fit"
+        )
+        return _make_response(
+            "WEAK_SIGNAL",
+            "CRITICAL",
+            0.9 if best_improvement < MEANINGFUL_IMPROVEMENT_THRESHOLD else 0.82,
+            f"Model fit is critically low (R²={r2_score:.3f}); {improvement_note}",
+            [
+                f"Strongest predictor correlation {strongest_correlation:.2f}",
+                f"Redundant pairs observed: {redundant_pairs_count} (max {max_redundancy:.2f})",
+            ],
+            evidence,
+        )
+
+    if redundant_pairs_count >= 3:
         severity = "HIGH" if redundant_pairs_count <= 5 else "CRITICAL"
         return _make_response(
             "MULTICOLLINEARITY",

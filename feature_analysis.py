@@ -23,7 +23,9 @@ def analyze_features(df: pd.DataFrame, target_col: str) -> dict:
         numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
 
         if target_col not in numeric_cols:
-            return {"weak_features": 0, "redundant_pairs": [], "feature_quality": 0, "diversity_score": 0}
+            return {"weak_features": 0, "predictor_count": 0, "redundant_pairs": [], "feature_quality": 0, "diversity_score": 0}
+
+        predictor_count = max(len(numeric_cols) - 1, 0)
 
         # Weak features: correlation < 0.15 with target
         # FIX 3: NaN safety
@@ -54,10 +56,11 @@ def analyze_features(df: pd.DataFrame, target_col: str) -> dict:
 
         return {
             "weak_features": int(weak_count),
+            "predictor_count": int(predictor_count),
             "redundant_pairs": redundant,
             "feature_quality": float(quality_score),
             "diversity_score": float(diversity),
         }
 
     except Exception:
-        return {"weak_features": 0, "redundant_pairs": [], "feature_quality": 0, "diversity_score": 0}
+        return {"weak_features": 0, "predictor_count": 0, "redundant_pairs": [], "feature_quality": 0, "diversity_score": 0}
