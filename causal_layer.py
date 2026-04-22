@@ -54,6 +54,15 @@ def build_causal_explanation(evidence: Dict | None, decision: Dict | None, ml_re
         ]
         model_impact = f"Current models plateau around R² {r2_percentage:.1f}% because key explanatory drivers are missing."
         domain_context = "Collect additional domain-grounded inputs before algorithm-level tuning."
+    elif decision_name == "WEAK_SIGNAL":
+        root_cause = "Current features do not capture meaningful drivers of the target variable."
+        evidence_chain = [
+            f"Model fit is critically low at R² {r2_percentage:.1f}%.",
+            f"Best observed improvement is {float(evidence.get('best_improvement', 0.0)) * 100:.1f}%, which is not meaningful.",
+            f"Maximum inter-feature correlation is {max_redundancy:.2f}, indicating redundancy is secondary to weak signal.",
+        ]
+        model_impact = "Predictions remain unreliable until new predictive signal is introduced."
+        domain_context = "Prioritize collection and engineering of target-relevant features before model-level optimization."
     else:
         root_cause = "Feature signal strength is insufficient for high-confidence prediction."
         evidence_chain = [

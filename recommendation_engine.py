@@ -36,6 +36,7 @@ def generate_recommendations_v2(
         "r2_percentage": evidence.get("r2_percentage", 0.0),
         "weak_feature_pct": evidence.get("weak_feature_pct", 0),
     }
+    domain_context = str(context.get("domain", "generic"))
 
     if decision_name == "DATA_ISSUE":
         return [
@@ -68,9 +69,37 @@ def generate_recommendations_v2(
                 effort="LOW",
             ),
             _action(
+                "MEDIUM",
+                "If instability remains after feature pruning, apply PCA or regularization as a secondary step",
+                "Dimensionality reduction should follow direct redundancy cleanup, not replace it.",
+                common_evidence,
+                impact="MEDIUM",
+                effort="MEDIUM",
+            ),
+        ]
+
+    if decision_name == "WEAK_SIGNAL":
+        return [
+            _action(
+                severity,
+                "Introduce new predictive features aligned with the target outcome",
+                f"{root_cause} Trigger: {dominant_signal}",
+                {**common_evidence, "best_improvement": evidence.get("best_improvement", 0.0), "domain": domain_context},
+                impact="HIGH",
+                effort="HIGH",
+            ),
+            _action(
                 "HIGH",
-                "Apply PCA or regularization to stabilize feature effects",
-                "Dimensionality reduction reduces redundant signal overlap.",
+                "Expand feature engineering with interaction and non-linear terms guided by domain knowledge",
+                f"Current feature set shows weak signal; domain context is '{domain_context}'.",
+                common_evidence,
+                impact="HIGH",
+                effort="MEDIUM",
+            ),
+            _action(
+                "HIGH",
+                "Reassess whether available data is suitable for the prediction target before model tuning",
+                "When all tested methods show negligible gain, data relevance is the primary constraint.",
                 common_evidence,
                 impact="HIGH",
                 effort="MEDIUM",
@@ -146,7 +175,7 @@ def generate_rule_chained_recommendations(
 ) -> Dict:
     """Backward-compatible wrapper for legacy call sites."""
     recommendations = generate_recommendations_v2(
-        {"decision": "WEAK_FEATURES", "severity": "MEDIUM", "dominant_signal": "legacy_fallback", "secondary_signals": []},
+        {"decision": "WEAK_SIGNAL", "severity": "MEDIUM", "dominant_signal": "legacy_fallback", "secondary_signals": []},
         {},
         {"root_cause": "Legacy recommendation flow invoked."},
         {},

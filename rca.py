@@ -4,23 +4,34 @@ from __future__ import annotations
 from typing import Dict
 
 
+def _unknown_diagnosis(validation_errors: list | None = None) -> dict:
+    """Return a safe fallback diagnosis dict when evidence is absent or incomplete."""
+    result = {
+        "model_perf": "unknown",
+        "feature_strength": "unknown",
+        "multicollinearity": "unknown",
+        "data_quality": "unknown",
+        "evidence_used": False,
+    }
+    if validation_errors:
+        result["validation_errors"] = validation_errors
+    return result
+
+
 def diagnose(
     signals: Dict | None = None, ml_results: Dict | None = None, evidence: Dict | None = None
 ) -> Dict:
     _ = (signals, ml_results)  # Retained for compatibility and potential fallback diagnostics.
-    if not evidence:
-        return {
-            "model_perf": "unknown",
-            "feature_strength": "unknown",
-            "multicollinearity": "unknown",
-            "data_quality": "unknown",
-        }
+    if not evidence or not isinstance(evidence, dict):
+        return _unknown_diagnosis()
 
     # ✅ FIX #1: ADD VALIDATION - ensure critical keys exist
     required_keys = ["r2_score", "weak_feature_pct", "redundant_pairs_count", "data_quality_score"]
-    for key in required_keys:
-        if key not in evidence:
-            raise ValueError(f"Missing required evidence key: {key}. Evidence keys: {list(evidence.keys())}")
+    missing_keys = [key for key in required_keys if key not in evidence]
+    if missing_keys:
+        return _unknown_diagnosis(
+            validation_errors=[f"Missing required evidence key: {k}" for k in missing_keys]
+        )
 
     r2_score = float(evidence.get("r2_score", 0.0))
     weak_feature_pct = int(evidence.get("weak_feature_pct", 0))
@@ -51,8 +62,6 @@ def diagnose(
         multicollinearity = "critical"
     elif redundant_pairs_count >= 3:  # Changed from > 2
         multicollinearity = "high"
-    elif redundant_pairs_count >= 1:
-        multicollinearity = "moderate"
     else:
         multicollinearity = "low"
 

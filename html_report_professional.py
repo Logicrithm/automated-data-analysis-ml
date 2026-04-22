@@ -26,6 +26,13 @@ def _safe_text(value: Any, default: str = "N/A") -> str:
     return text if text else default
 
 
+def _weak_feature_display(value: Any) -> str:
+    weak_pct = int(max(0.0, _to_float(value)))
+    if weak_pct <= 100:
+        return f"{weak_pct}%"
+    return "High proportion of features shows low correlation with target (value capped for display purposes)"
+
+
 def _visual_block(name: str, path: str) -> str:
     file_path = Path(path)
     if not file_path.exists():
@@ -327,7 +334,7 @@ th, td {{ border:1px solid #d1d5db; padding:8px; text-align:left; vertical-align
     <h3>Model Performance</h3>
     <p><strong>R² Score:</strong> {model_r2:.4f}</p>
     <p><strong>Strongest Correlation:</strong> {_to_float(evidence.get('strongest_correlation')):.2f}</p>
-    <p><strong>Weak Features:</strong> {int(_to_float(evidence.get('weak_feature_pct')))}%</p>
+    <p><strong>Weak Features:</strong> {html.escape(_weak_feature_display(evidence.get('weak_feature_pct')))}</p>
   </section>
 
   <section id="section-recommendations" class="section">
