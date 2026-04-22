@@ -36,7 +36,7 @@ def generate_recommendations_v2(
         "r2_percentage": evidence.get("r2_percentage", 0.0),
         "weak_feature_pct": evidence.get("weak_feature_pct", 0),
     }
-    inferred_domain = str(context.get("domain", "generic"))
+    domain_context = str(context.get("domain", "generic"))
 
     if decision_name == "DATA_ISSUE":
         return [
@@ -84,14 +84,14 @@ def generate_recommendations_v2(
                 severity,
                 "Introduce new predictive features aligned with the target outcome",
                 f"{root_cause} Trigger: {dominant_signal}",
-                {**common_evidence, "best_improvement": evidence.get("best_improvement", 0.0), "domain": inferred_domain},
+                {**common_evidence, "best_improvement": evidence.get("best_improvement", 0.0), "domain": domain_context},
                 impact="HIGH",
                 effort="HIGH",
             ),
             _action(
                 "HIGH",
                 "Expand feature engineering with interaction and non-linear terms guided by domain knowledge",
-                f"Current feature set shows weak signal; inferred domain context is '{inferred_domain}'.",
+                f"Current feature set shows weak signal; domain context is '{domain_context}'.",
                 common_evidence,
                 impact="HIGH",
                 effort="MEDIUM",

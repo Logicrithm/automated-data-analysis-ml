@@ -130,10 +130,13 @@ def decide_root_cause(evidence: Dict | None) -> Dict:
         )
 
     if r2_score < 0.10:
+        # Threshold: MEANINGFUL_IMPROVEMENT_THRESHOLD (5%) distinguishes meaningful gains
+        # from noise; below it, no tested method materially helps regardless of other signals.
+        best_improvement_pct = best_improvement * 100
         improvement_note = (
-            f"best improvement +{best_improvement * 100:.1f}% is negligible"
+            f"best improvement +{best_improvement_pct:.1f}% is negligible"
             if best_improvement < MEANINGFUL_IMPROVEMENT_THRESHOLD
-            else f"best improvement +{best_improvement * 100:.1f}% still leaves very low fit"
+            else f"best improvement +{best_improvement_pct:.1f}% still leaves very low fit"
         )
         return _make_response(
             "WEAK_SIGNAL",

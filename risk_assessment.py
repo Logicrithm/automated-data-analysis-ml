@@ -48,7 +48,7 @@ def generate_risk_assessment(results: Dict[str, Any]) -> Dict[str, Any]:
             "name": "Model Reliability Risk",
             "likelihood": model_risk_likelihood,
             "impact": max(impact_base, 2),
-            "description": f"Primary risk: model is not predictive (R² = {r2_score:.2f}), leading to unreliable outputs.",
+            "description": f"Primary risk: model is not predictive (R²={r2_score:.2f}), leading to unreliable outputs.",
         },
         {
             "name": "Data Quality Risk",

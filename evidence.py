@@ -8,7 +8,8 @@ def build_evidence(
     _ = diagnosis
 
     weak_features = int(feature_analysis.get("weak_features", 0))
-    predictor_count = int(feature_analysis.get("predictor_count", feature_analysis.get("total_features", 0)))
+    _pc = feature_analysis.get("predictor_count")
+    predictor_count = int(_pc if _pc is not None else feature_analysis.get("total_features", 0))
     weak_feature_pct = int(round((weak_features / max(predictor_count, 1)) * 100))
     weak_feature_pct = max(0, min(100, weak_feature_pct))
 

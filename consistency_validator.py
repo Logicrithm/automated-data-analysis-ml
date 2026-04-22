@@ -16,6 +16,20 @@ WEAK_SIGNAL_R2_THRESHOLD = 0.10
 NEGLIGIBLE_IMPROVEMENT_THRESHOLD = 0.05
 
 
+def _is_multicollinearity_over_weak_signal(decision_name: str, r2_score: float) -> bool:
+    """Return True when decision is MULTICOLLINEARITY but R² is too low – should be WEAK_SIGNAL."""
+    return decision_name == "MULTICOLLINEARITY" and r2_score < WEAK_SIGNAL_R2_THRESHOLD
+
+
+def _is_weak_signal_misclassified(decision_name: str, r2_score: float, best_improvement: float) -> bool:
+    """Return True when WEAK_SIGNAL is selected but neither criterion (low R² or negligible gain) holds."""
+    return (
+        decision_name == "WEAK_SIGNAL"
+        and r2_score >= WEAK_SIGNAL_R2_THRESHOLD
+        and best_improvement >= NEGLIGIBLE_IMPROVEMENT_THRESHOLD
+    )
+
+
 def _has_keyword_match(text: str, keywords: List[str]) -> bool:
     lowered = text.lower()
     patterns = [re.compile(rf"(?<!\w){re.escape(keyword.lower())}(?!\w)") for keyword in keywords]
@@ -60,20 +74,20 @@ def validate_consistency(
     flags: List[str] = []
     checks = {
         "decision_priority_consistent": True,
-        "experiment_gain_interpreted": True,
+        "improvement_is_meaningful": best_improvement >= NEGLIGIBLE_IMPROVEMENT_THRESHOLD,
         "recommendations_match_decision": True,
         "no_conflicting_priorities": True,
         "summary_aligned_with_decision": True,
         "all_recommendations_have_evidence": True,
     }
 
-    if r2_score < WEAK_SIGNAL_R2_THRESHOLD and decision_name == "MULTICOLLINEARITY":
+    if _is_multicollinearity_over_weak_signal(decision_name, r2_score):
         checks["decision_priority_consistent"] = False
         flags.append(
             f"Conflict detected: R²={r2_score:.3f} is below {WEAK_SIGNAL_R2_THRESHOLD:.2f}, "
             "but primary decision is MULTICOLLINEARITY. Expected WEAK_SIGNAL."
         )
-    if decision_name == "WEAK_SIGNAL" and r2_score >= WEAK_SIGNAL_R2_THRESHOLD and best_improvement >= NEGLIGIBLE_IMPROVEMENT_THRESHOLD:
+    if _is_weak_signal_misclassified(decision_name, r2_score, best_improvement):
         checks["decision_priority_consistent"] = False
         flags.append(
             f"Conflict detected: WEAK_SIGNAL selected with R²={r2_score:.3f} and "
@@ -81,7 +95,6 @@ def validate_consistency(
         )
 
     if best_improvement < NEGLIGIBLE_IMPROVEMENT_THRESHOLD:
-        checks["experiment_gain_interpreted"] = False
         flags.append(
             f"Best observed improvement {best_improvement * 100:.1f}% is below "
             f"{NEGLIGIBLE_IMPROVEMENT_THRESHOLD * 100:.0f}% and should be treated as negligible."

@@ -30,7 +30,7 @@ def _weak_feature_display(value: Any) -> str:
     weak_pct = int(max(0.0, _to_float(value)))
     if weak_pct <= 100:
         return f"{weak_pct}%"
-    return "High proportion of features show low correlation with target (value capped for interpretability)"
+    return "High proportion of features shows low correlation with target (value capped for display purposes)"
 
 
 def _visual_block(name: str, path: str) -> str:
