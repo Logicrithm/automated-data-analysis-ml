@@ -48,8 +48,6 @@ def _legacy_diagnosis(decision: str, evidence: Dict) -> Dict:
         multicollinearity = "critical"
     elif redundant_pairs_count >= 3:
         multicollinearity = "high"
-    elif redundant_pairs_count >= 1:
-        multicollinearity = "moderate"
     else:
         multicollinearity = "low"
 

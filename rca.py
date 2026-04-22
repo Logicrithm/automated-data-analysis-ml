@@ -59,8 +59,6 @@ def diagnose(
         multicollinearity = "critical"
     elif redundant_pairs_count >= 3:  # Changed from > 2
         multicollinearity = "high"
-    elif redundant_pairs_count >= 1:
-        multicollinearity = "moderate"
     else:
         multicollinearity = "low"
 
